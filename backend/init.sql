@@ -12,6 +12,5 @@ CREATE TABLE IF NOT EXISTS lunch_registrations (
   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert some dummy data for the MVP
 INSERT INTO students (rut, name, grade) VALUES ('12345678-9', 'Juan Perez', '1A') ON CONFLICT (rut) DO NOTHING;
 INSERT INTO students (rut, name, grade) VALUES ('98765432-1', 'Maria Gomez', '2B') ON CONFLICT (rut) DO NOTHING;

@@ -24,7 +24,7 @@ body {
   background: var(--bg-gradient);
   min-height: 100vh;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
   color: var(--text-dark);
 }
@@ -33,6 +33,7 @@ body {
   width: 100%;
   max-width: 480px;
   padding: 20px;
+  margin: 0 auto;
 }
 
 .glass-panel {
@@ -247,7 +248,6 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Registrations List */
 .toggle-view-btn {
   width: 100%;
   padding: 12px;
@@ -290,12 +290,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 250px;
+  max-height: 500px;
   overflow-y: auto;
   padding-right: 4px;
 }
 
-/* Scrollbar styling for the list */
 .registrations-list::-webkit-scrollbar {
   width: 6px;
 }
@@ -309,12 +308,27 @@ body {
 
 .registration-card {
   background: white;
-  padding: 12px 16px;
   border-radius: 12px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.registration-card.expanded {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.registration-card-header {
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.registration-card-header:hover {
+  background: #F8FAFC;
 }
 
 .registration-info h4 {
@@ -325,6 +339,88 @@ body {
 .registration-info p {
   font-size: 0.8rem;
   color: var(--text-light);
+}
+
+.registration-detail {
+  padding: 0 16px 14px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+.detail-row strong {
+  color: var(--text-dark);
+}
+
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn.edit {
+  background: #EEF2FF;
+  color: var(--primary);
+}
+
+.action-btn.edit:hover {
+  background: #E0E7FF;
+}
+
+.action-btn.delete {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.action-btn.delete:hover {
+  background: #FECACA;
+}
+
+.action-btn.cancel {
+  background: #F1F5F9;
+  color: var(--text-light);
+}
+
+.action-btn.cancel:hover {
+  background: #E2E8F0;
+}
+
+.confirm-delete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #DC2626;
+}
+
+.header-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-top: 4px;
 }
 
 .meal-badge {
@@ -342,4 +438,547 @@ body {
 .meal-badge.breakfast {
   background: #FEF3C7;
   color: #D97706;
+}
+
+.scanner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+  background: #F1F5F9;
+  color: var(--text-light);
+  border: 1px solid #E2E8F0;
+  user-select: none;
+}
+
+.scanner-badge.active {
+  background: #ECFDF5;
+  color: #059669;
+  border-color: #A7F3D0;
+  animation: scannerPulse 2s infinite;
+}
+
+@keyframes scannerPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+
+.scanner-raw {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #1E293B;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+.scanner-raw-label {
+  color: #94A3B8;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scanner-raw code {
+  color: #22D3EE;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.test-barcodes-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.test-barcodes-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.test-barcodes-header h1 {
+  color: var(--primary);
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+
+.test-barcodes-header p {
+  color: var(--text-light);
+  font-size: 0.95rem;
+}
+
+.print-btn {
+  padding: 12px 24px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.print-btn:hover {
+  background: var(--primary-hover);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 24px;
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: 2px solid var(--primary);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.back-link:hover {
+  background: rgba(79, 70, 229, 0.05);
+}
+
+.barcodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.barcode-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.04);
+  border: 2px dashed #E2E8F0;
+  break-inside: avoid;
+}
+
+.barcode-card h3 {
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+  color: var(--text-dark);
+}
+
+.barcode-card p {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-bottom: 12px;
+}
+
+.barcode-card svg {
+  width: 100%;
+  max-width: 280px;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .main-nav { display: none !important; }
+  body { background: white; }
+  .barcode-card { border: 1px solid #ccc; page-break-inside: avoid; }
+}
+
+.main-nav {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  background: white;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 28px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-light);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.nav-tab:hover {
+  color: var(--primary);
+  background: #F8FAFC;
+}
+
+.nav-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.date-range {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.date-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 120px;
+}
+
+.date-field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 4px;
+}
+
+.date-field input[type="date"] {
+  padding: 8px 10px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  background: white;
+  transition: border-color 0.2s ease;
+}
+
+.date-field input[type="date"]:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.date-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  white-space: nowrap;
+}
+
+.date-search-btn:hover {
+  background: var(--primary-hover);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.history-header h3 {
+  font-size: 1.1rem;
+  color: var(--text-dark);
+}
+
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: #059669;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.export-btn:hover {
+  background: #047857;
+}
+
+.add-student-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--secondary);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s ease;
+  margin-bottom: 16px;
+}
+
+.add-student-btn:hover {
+  background: var(--secondary-hover);
+}
+
+.student-form {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.student-form h3 {
+  font-size: 1rem;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+
+.student-form input {
+  padding: 10px 14px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: border-color 0.2s ease;
+}
+
+.student-form input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.student-form input:disabled {
+  background: #F1F5F9;
+  color: var(--text-light);
+}
+
+.save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.save-btn:hover {
+  background: var(--primary-hover);
+}
+
+.students-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 2px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  transition: border-color 0.2s ease;
+}
+
+.students-search:focus-within {
+  border-color: var(--primary);
+}
+
+.students-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.9rem;
+  background: transparent;
+}
+
+.students-search svg {
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+
+.students-count {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.students-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.student-row {
+  background: white;
+  padding: 12px 16px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.student-row-info h4 {
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+
+.student-row-info p {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.student-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  body {
+    align-items: flex-start;
+  }
+
+  .app-container {
+    max-width: 100%;
+    padding: 12px;
+  }
+
+  .glass-panel {
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .nav-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 12px 16px;
+    font-size: 0.85rem;
+  }
+
+  .barcodes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    align-items: stretch;
+  }
+
+  .app-container {
+    padding: 0;
+  }
+
+  .glass-panel {
+    border-radius: 0;
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  .header h1 {
+    font-size: 1.25rem;
+  }
+
+  .meal-btn {
+    padding: 10px 8px;
+    font-size: 0.85rem;
+    gap: 4px;
+  }
+
+  .input-group input {
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+
+  .search-btn {
+    width: 48px;
+  }
+
+  .toggle-view-btn {
+    font-size: 0.85rem;
+    padding: 10px;
+  }
+
+  .date-range {
+    flex-direction: column;
+  }
+
+  .date-field {
+    min-width: 100%;
+  }
+
+  .date-search-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .registration-card-header {
+    padding: 10px 12px;
+  }
+
+  .detail-actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    justify-content: center;
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+
+  .student-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .student-row-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .student-row-actions .action-btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  .nav-tab {
+    padding: 12px 8px;
+    font-size: 0.8rem;
+    gap: 4px;
+  }
+
+  .export-btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
 }

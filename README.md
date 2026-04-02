@@ -160,6 +160,17 @@ Y carga 7 estudiantes de prueba, incluyendo 2 con codigos de barra fisicos para 
 
 ---
 
+## Credenciales de Acceso (Pruebas Locales)
+
+Tras ejecutar el script `seed.js`, se generarán cuentas de prueba que son necesarias para la nueva capa de seguridad (JWT + Cookies):
+
+| Rol | Correo | Contraseña | Accesos |
+|---|---|---|---|
+| **Lector** | `lector@colegio.cl` | `1234` | Tiene acceso estricto a la vista de escáner. |
+| **Admin** | `admin@colegio.cl` | `1234` | Tiene acceso a los dashboards de reporte (Asistente Social). |
+
+---
+
 ## Ejecucion
 
 Iniciar el backend (puerto 5000):

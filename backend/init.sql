@@ -122,11 +122,7 @@ CREATE TABLE usuarios (
 CREATE TABLE beneficiario_alimentacion (
   id_beneficiario SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
-  activo BOOLEAN DEFAULT true,
-  fecha_inicio DATE,
-  fecha_fin DATE,
-  motivo_ingreso TEXT,
-  resolucion_asistente_social TEXT
+  activo BOOLEAN DEFAULT true
 );
 
 CREATE TABLE restriccion_dietaria (

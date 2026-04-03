@@ -3,6 +3,7 @@ import axios from 'axios';
 import { AuthContext } from './context/AuthContext';
 import { Users, AlertTriangle, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import HistoryPanel from './components/HistoryPanel';
 
 const AdminDashboard = () => {
   const [reporte, setReporte] = useState([]);
@@ -81,6 +82,13 @@ const AdminDashboard = () => {
             </tbody>
           </table>
         )}
+
+        <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '2rem 0' }} />
+        
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ color: 'var(--text-dark)', marginBottom: '1rem' }}>Historial Completo de Registros</h3>
+          <HistoryPanel />
+        </div>
 
       </div>
     </div>

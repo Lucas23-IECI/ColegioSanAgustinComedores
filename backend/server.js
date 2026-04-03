@@ -97,9 +97,7 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
       SELECT activo 
       FROM beneficiario_alimentacion 
       WHERE id_alumno = $1 
-        AND activo = true 
-        AND CURRENT_DATE >= fecha_inicio 
-        AND (fecha_fin IS NULL OR CURRENT_DATE <= fecha_fin)
+        AND activo = true
     `;
     const resBenef = await pool.query(queryBenef, [alumno.id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
@@ -147,8 +145,7 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
 
     const queryBenef = `
       SELECT activo FROM beneficiario_alimentacion 
-      WHERE id_alumno = $1 AND activo = true 
-      AND CURRENT_DATE >= fecha_inicio AND (fecha_fin IS NULL OR CURRENT_DATE <= fecha_fin)
+      WHERE id_alumno = $1 AND activo = true
     `;
     const resBenef = await pool.query(queryBenef, [id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
@@ -187,19 +184,47 @@ app.get('/api/admin/reportes/recurrentes', verifyToken, verifyRole(['admin']), a
   }
 });
 
-app.get('/api/lunches/history', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
-  const { from, to } = req.query;
+// === MAESTROS (Para Listas Desplegables) ===
+app.get('/api/courses', verifyToken, async (req, res) => {
   try {
-    const query = `
-      SELECT lr.id_registro, a.rut, a.nombres, a.paterno, c.nombre_curso, lr.tipo_alimentacion, lr.fecha_entrega, lr.hora_entrega, lr.es_beneficiario_al_momento
+    const query = `SELECT id_curso, nombre_curso FROM curso ORDER BY nombre_curso ASC`;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+app.get('/api/lunches/history', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
+  const { from, to, curso, beneficiario } = req.query;
+  try {
+    let query = `
+      SELECT lr.id_registro, a.rut, a.nombres, a.paterno, a.materno, a.email, a.activo as alumno_activo, c.nombre_curso, lr.tipo_alimentacion, lr.fecha_entrega, lr.hora_entrega, lr.es_beneficiario_al_momento
       FROM lunch_registrations lr
       JOIN alumno a ON lr.id_alumno = a.id_alumno
       LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
       LEFT JOIN curso c ON m.id_curso = c.id_curso
       WHERE lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
-      ORDER BY lr.fecha_entrega DESC, lr.hora_entrega DESC
     `;
-    const result = await pool.query(query, [from || '2000-01-01', to || '2100-01-01']);
+    let params = [from || '2000-01-01', to || '2100-01-01'];
+    let paramCount = 3;
+
+    if (curso) {
+      query += ` AND c.nombre_curso = $${paramCount}`;
+      params.push(curso);
+      paramCount++;
+    }
+
+    if (beneficiario === 'yes') {
+      query += ` AND lr.es_beneficiario_al_momento = true`;
+    } else if (beneficiario === 'no') {
+      query += ` AND lr.es_beneficiario_al_momento = false`;
+    }
+
+    query += ` ORDER BY lr.fecha_entrega DESC, lr.hora_entrega DESC`;
+    
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);

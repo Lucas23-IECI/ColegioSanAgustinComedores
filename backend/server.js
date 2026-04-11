@@ -72,6 +72,7 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
   const { barcode } = req.params;
   const { tipo_alimentacion } = req.query;
+  const tipoAlimentacionNormalizado = (tipo_alimentacion || '').toString().trim().toLowerCase();
 
   try {
     const queryAlumno = `
@@ -109,12 +110,12 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
 
     // COMPROBACION HOY
     let alreadyRegistered = false;
-    if (tipo_alimentacion) {
+    if (tipoAlimentacionNormalizado) {
       const queryCheck = `
         SELECT id_registro FROM lunch_registrations 
-        WHERE id_alumno = $1 AND tipo_alimentacion = $2 AND fecha_entrega = CURRENT_DATE
+        WHERE id_alumno = $1 AND LOWER(tipo_alimentacion) = $2 AND fecha_entrega = CURRENT_DATE
       `;
-      const resCheck = await pool.query(queryCheck, [alumno.id_alumno, tipo_alimentacion]);
+      const resCheck = await pool.query(queryCheck, [alumno.id_alumno, tipoAlimentacionNormalizado]);
       alreadyRegistered = resCheck.rows.length > 0;
     }
 
@@ -134,7 +135,8 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
 // === REALIZAR REGISTRO ===
 app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
   const { id_alumno, tipo_alimentacion } = req.body;
-  if (!id_alumno || !tipo_alimentacion) return res.status(400).json({ message: 'Faltan datos' });
+  const tipoAlimentacionNormalizado = (tipo_alimentacion || '').toString().trim().toLowerCase();
+  if (!id_alumno || !tipoAlimentacionNormalizado) return res.status(400).json({ message: 'Faltan datos' });
 
   try {
      const queryAlumno = `SELECT activo FROM alumno WHERE id_alumno = $1`;
@@ -154,9 +156,85 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
       INSERT INTO lunch_registrations (id_alumno, tipo_alimentacion, es_beneficiario_al_momento)
       VALUES ($1, $2, $3) RETURNING *
     `;
-    const result = await pool.query(queryInsert, [id_alumno, tipo_alimentacion, esBeneficiario]);
+    const result = await pool.query(queryInsert, [id_alumno, tipoAlimentacionNormalizado, esBeneficiario]);
 
     res.json({ message: 'Registrado', registro: result.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Error');
+  }
+});
+
+// === RESUMEN DEL DÍA ===
+app.get('/api/admin/alimentacion/resumen-dia', verifyToken, verifyRole(['admin']), async (req, res) => {
+  try {
+    // Conteos por tipo de alimentación hoy
+    const countQuery = `
+      SELECT 
+        COUNT(*) FILTER (WHERE LOWER(tipo_alimentacion) = 'almuerzo') as total_almuerzos,
+        COUNT(*) FILTER (WHERE LOWER(tipo_alimentacion) = 'desayuno') as total_desayunos,
+        COUNT(*) FILTER (WHERE es_beneficiario_al_momento = true) as total_beneficiarios,
+        COUNT(*) FILTER (WHERE es_beneficiario_al_momento = false) as total_no_beneficiarios,
+        COUNT(*) as total_general
+      FROM lunch_registrations
+      WHERE fecha_entrega = CURRENT_DATE
+    `;
+    const countResult = await pool.query(countQuery);
+
+    // Últimos 5 registros del día
+    const recentQuery = `
+      SELECT lr.id_registro, a.nombres, a.paterno, c.nombre_curso, lr.tipo_alimentacion, lr.hora_entrega, lr.es_beneficiario_al_momento
+      FROM lunch_registrations lr
+      JOIN alumno a ON lr.id_alumno = a.id_alumno
+      LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+      LEFT JOIN curso c ON m.id_curso = c.id_curso
+      WHERE lr.fecha_entrega = CURRENT_DATE
+      ORDER BY lr.hora_entrega DESC
+      LIMIT 5
+    `;
+    const recentResult = await pool.query(recentQuery);
+
+    res.json({
+      stats: countResult.rows[0],
+      recientes: recentResult.rows
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Error');
+  }
+});
+
+// === REPORTE MATRICIAL DE ASISTENCIA ===
+app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const { desde, hasta, tipo } = req.query;
+  if (!desde || !hasta) return res.status(400).json({ message: 'Faltan fechas desde/hasta' });
+
+  try {
+    let whereExtra = '';
+    if (tipo === 'almuerzo') {
+      whereExtra = ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
+    } else if (tipo === 'desayuno') {
+      whereExtra = ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
+    } else if (tipo === 'no_beneficiarios') {
+      whereExtra = ` AND lr.es_beneficiario_al_momento = false`;
+    }
+    // tipo === 'general' => sin filtro extra
+
+    const query = `
+      SELECT 
+        a.id_alumno, a.rut, a.dv, a.nombres, a.paterno, a.materno, a.email,
+        c.nombre_curso,
+        lr.fecha_entrega::TEXT as fecha_entrega, lr.tipo_alimentacion
+      FROM lunch_registrations lr
+      JOIN alumno a ON lr.id_alumno = a.id_alumno
+      LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+      LEFT JOIN curso c ON m.id_curso = c.id_curso
+      WHERE lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
+      ${whereExtra}
+      ORDER BY a.paterno ASC, a.materno ASC, a.nombres ASC, lr.fecha_entrega ASC
+    `;
+    const result = await pool.query(query, [desde, hasta]);
+    res.json(result.rows);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Error');

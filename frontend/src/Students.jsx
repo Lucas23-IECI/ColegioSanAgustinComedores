@@ -1,16 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, ChevronLeft, X, HeartPulse, Filter, DollarSign, Users, GraduationCap } from 'lucide-react';
+import { Search, ChevronLeft, X, HeartPulse, DollarSign, Users, GraduationCap, Database, Upload, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './index.css';
 
 const API_URL = 'http://localhost:5000/api';
 
+const normalizeHeaderKey = (value) => {
+  return String(value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+};
+
+const getCell = (row, aliases) => {
+  const aliasSet = new Set(aliases.map((alias) => normalizeHeaderKey(alias)));
+  for (const [key, value] of Object.entries(row || {})) {
+    if (!aliasSet.has(normalizeHeaderKey(key))) continue;
+    const cleaned = String(value ?? '').trim();
+    if (cleaned !== '') return cleaned;
+  }
+  return '';
+};
+
 function Students() {
+  const [activeSection, setActiveSection] = useState('listado');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(null);
+
+  const [excelRows, setExcelRows] = useState([]);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [excelFileName, setExcelFileName] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+  const [uploadError, setUploadError] = useState('');
   
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [studentDetails, setStudentDetails] = useState(null);
@@ -53,6 +80,81 @@ function Students() {
     setStudentDetails(null);
   };
 
+  const handleExcelUpload = async (event) => {
+    const file = event.target.files?.[0];
+    setUploadError('');
+    setSyncResult(null);
+
+    if (!file) return;
+
+    try {
+      const XLSX = await import('xlsx');
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+
+      if (!firstSheetName) {
+        setUploadError('El archivo no contiene hojas válidas.');
+        return;
+      }
+
+      const sheet = workbook.Sheets[firstSheetName];
+      const parsedRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const nonEmptyRows = parsedRows.filter((row) =>
+        Object.values(row).some((value) => String(value).trim() !== '')
+      );
+
+      if (!nonEmptyRows.length) {
+        setUploadError('No se detectaron filas con datos en la hoja.');
+        setExcelRows([]);
+        setPreviewRows([]);
+        setExcelFileName('');
+        return;
+      }
+
+      const mappedPreview = nonEmptyRows.map((row, index) => {
+        const rut = getCell(row, ['rut', 'run', 'rut alumno', 'run alumno']);
+        const nombres = getCell(row, ['nombres', 'nombre']);
+        const paterno = getCell(row, ['paterno']);
+        const materno = getCell(row, ['materno']);
+        const nombreCompleto = getCell(row, ['nombre completo', 'alumno', 'name']);
+        const nombre = nombreCompleto || [nombres, paterno, materno].filter(Boolean).join(' ');
+
+        const curso = getCell(row, ['curso', 'grade', 'nombre curso', 'curso actual', 'nivel', 'enseñanza', 'ensenanza']);
+        const email = getCell(row, ['email', 'correo', 'correo electronico', 'mail']);
+        return { index: index + 2, rut, nombre, curso, email };
+      });
+
+      setExcelRows(nonEmptyRows);
+      setPreviewRows(mappedPreview);
+      setExcelFileName(file.name);
+    } catch (err) {
+      console.error(err);
+      setUploadError('No fue posible leer el archivo Excel.');
+    }
+  };
+
+  const syncExcelWithDatabase = async () => {
+    if (!excelRows.length || syncing) return;
+
+    setSyncing(true);
+    setUploadError('');
+    setSyncResult(null);
+
+    try {
+      const res = await axios.post(`${API_URL}/students/bulk-sync`, { students: excelRows });
+      setSyncResult(res.data);
+      fetchStudents();
+      setSelectedCourse(null);
+      setActiveSection('listado');
+    } catch (err) {
+      console.error(err);
+      setUploadError(err.response?.data?.message || 'Falló la sincronización de estudiantes.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const courseGroups = students.reduce((acc, s) => {
     const curso = s.grade || 'Sin Curso Asignado';
     if (!acc[curso]) acc[curso] = [];
@@ -77,8 +179,15 @@ function Students() {
            <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
               <button 
                 onClick={() => {
-                   if (selectedCourse) setSelectedCourse(null);
-                   else navigate('/admin');
+                   if (selectedCourse) {
+                     setSelectedCourse(null);
+                     return;
+                   }
+                   if (activeSection === 'carga') {
+                     setActiveSection('listado');
+                     return;
+                   }
+                   navigate('/admin');
                 }} 
                 className="action-btn" 
                 style={{backgroundColor: 'rgba(79, 70, 229, 0.1)', padding: '8px', color: 'var(--primary)', border: '1px solid rgba(79, 70, 229, 0.2)'}}
@@ -86,14 +195,49 @@ function Students() {
                 <ChevronLeft size={20} />
               </button>
               <h2 style={{color: 'var(--text-dark)', margin: 0}}>
-                 {selectedCourse ? `Alumnos: ${selectedCourse}` : 'Listado de Cursos'}
+                 {activeSection === 'listado'
+                   ? (selectedCourse ? `Alumnos: ${selectedCourse}` : 'Listado de Cursos')
+                   : 'Carga de BD de Estudiantes'}
               </h2>
            </div>
         </header>
 
-        {loading ? (
+        <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap'}}>
+          <button
+            className="action-btn"
+            onClick={() => {
+              setActiveSection('listado');
+              setUploadError('');
+            }}
+            style={{
+              padding: '10px 14px',
+              background: activeSection === 'listado' ? 'var(--primary)' : 'white',
+              color: activeSection === 'listado' ? 'white' : 'var(--text-dark)',
+              border: activeSection === 'listado' ? '1px solid var(--primary)' : '1px solid rgba(0,0,0,0.08)'
+            }}
+          >
+            <Users size={16} /> Listado de Estudiantes
+          </button>
+          <button
+            className="action-btn"
+            onClick={() => {
+              setActiveSection('carga');
+              setSelectedCourse(null);
+            }}
+            style={{
+              padding: '10px 14px',
+              background: activeSection === 'carga' ? 'var(--primary)' : 'white',
+              color: activeSection === 'carga' ? 'white' : 'var(--text-dark)',
+              border: activeSection === 'carga' ? '1px solid var(--primary)' : '1px solid rgba(0,0,0,0.08)'
+            }}
+          >
+            <Database size={16} /> Carga de BD
+          </button>
+        </div>
+
+        {activeSection === 'listado' && loading ? (
           <div className="loader">Cargando padrón...</div>
-        ) : !selectedCourse ? (
+        ) : activeSection === 'listado' && !selectedCourse ? (
           <div className="fade-in">
              <p style={{color: 'var(--text-light)', marginBottom: '20px'}}>
                 Selecciona la nómina de un curso para inspeccionar su universo de alumnos.
@@ -124,7 +268,7 @@ function Students() {
                 </div>
              </div>
           </div>
-        ) : (
+        ) : activeSection === 'listado' ? (
           <div className="fade-in">
              <div style={{display: 'flex', gap: '15px', marginBottom: '20px'}}>
                <div className="students-search" style={{flex: '1', minWidth: '250px'}}>
@@ -171,6 +315,103 @@ function Students() {
                </table>
                {filtered.length === 0 && <p style={{textAlign: 'center', marginTop: '20px', color: 'var(--text-light)'}}>No hay estudiantes coincidentes en esta nómina.</p>}
              </div>
+          </div>
+        ) : (
+          <div className="fade-in">
+            <div style={{background: 'white', border: '1px solid rgba(0,0,0,0.07)', borderRadius: '14px', padding: '18px', marginBottom: '15px'}}>
+              <h3 style={{margin: 0, marginBottom: '8px', color: 'var(--text-dark)', display: 'flex', gap: '8px', alignItems: 'center'}}>
+                <FileSpreadsheet size={18} /> Subir archivo Excel
+              </h3>
+              <p style={{color: 'var(--text-light)', marginBottom: '12px', fontSize: '0.9rem'}}>
+                Columnas recomendadas: RUT, Nombre o Nombres/Paterno, Curso, Email y Activo. El sistema comparará por RUT y decidirá si actualiza, crea o deja sin cambios.
+              </p>
+
+              <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center'}}>
+                <label className="action-btn" style={{background: '#EEF2FF', color: 'var(--primary)', cursor: 'pointer', border: '1px solid #C7D2FE', padding: '10px 14px'}}>
+                  <Upload size={16} /> Seleccionar Excel
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleExcelUpload}
+                    style={{display: 'none'}}
+                  />
+                </label>
+
+                <button
+                  className="action-btn"
+                  onClick={syncExcelWithDatabase}
+                  disabled={!excelRows.length || syncing}
+                  style={{
+                    background: excelRows.length ? '#059669' : '#CBD5E1',
+                    color: 'white',
+                    padding: '10px 14px',
+                    cursor: excelRows.length && !syncing ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  {syncing ? <RefreshCw size={16} className="spin" /> : <Database size={16} />} {syncing ? 'Sincronizando...' : 'Sincronizar con BD'}
+                </button>
+              </div>
+
+              {excelFileName && (
+                <p style={{marginTop: '10px', fontSize: '0.85rem', color: 'var(--text-light)'}}>
+                  Archivo cargado: <strong style={{color: 'var(--text-dark)'}}>{excelFileName}</strong> ({excelRows.length} filas)
+                </p>
+              )}
+
+              {uploadError && (
+                <div className="alert error" style={{marginTop: '12px'}}>{uploadError}</div>
+              )}
+
+              {syncResult && (
+                <div className="alert success" style={{marginTop: '12px', display: 'block'}}>
+                  <div><strong>Sincronización completada</strong></div>
+                  <div style={{marginTop: '6px'}}>Insertados: {syncResult.inserted} | Actualizados: {syncResult.updated} | Sin cambios: {syncResult.unchanged}</div>
+                  <div style={{marginTop: '4px'}}>Errores: {syncResult.errors?.length || 0}</div>
+                </div>
+              )}
+
+              {syncResult?.errors?.length > 0 && (
+                <div style={{marginTop: '12px', maxHeight: '160px', overflowY: 'auto', border: '1px solid #FECACA', borderRadius: '10px', padding: '10px', background: '#FEF2F2'}}>
+                  {syncResult.errors.map((errorItem, idx) => (
+                    <p key={`${errorItem.row}-${idx}`} style={{margin: '0 0 6px 0', color: '#991B1B', fontSize: '0.85rem'}}>
+                      Fila {errorItem.row}: {errorItem.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {previewRows.length > 0 && (
+              <div style={{overflowX: 'auto', background: 'white', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.07)'}}>
+                <table style={{width: '100%', color: 'var(--text-dark)', borderCollapse: 'collapse'}}>
+                  <thead>
+                    <tr style={{borderBottom: '1px solid rgba(0,0,0,0.1)'}}>
+                      <th style={{padding: '12px', textAlign: 'left'}}>Fila</th>
+                      <th style={{padding: '12px', textAlign: 'left'}}>RUT</th>
+                      <th style={{padding: '12px', textAlign: 'left'}}>Nombre</th>
+                      <th style={{padding: '12px', textAlign: 'left'}}>Curso</th>
+                      <th style={{padding: '12px', textAlign: 'left'}}>Email</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.slice(0, 25).map((row) => (
+                      <tr key={row.index} style={{borderBottom: '1px solid rgba(0,0,0,0.05)'}}>
+                        <td style={{padding: '10px 12px'}}>{row.index}</td>
+                        <td style={{padding: '10px 12px'}}>{row.rut || '-'}</td>
+                        <td style={{padding: '10px 12px'}}>{row.nombre || '-'}</td>
+                        <td style={{padding: '10px 12px'}}>{row.curso || '-'}</td>
+                        <td style={{padding: '10px 12px'}}>{row.email || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {previewRows.length > 25 && (
+                  <p style={{padding: '10px 12px', color: 'var(--text-light)', fontSize: '0.85rem'}}>
+                    Mostrando 25 de {previewRows.length} filas para previsualización.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

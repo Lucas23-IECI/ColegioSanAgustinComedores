@@ -151,6 +151,16 @@ cd backend
 node seed.js
 ```
 
+Si ya tenias la base creada previamente, agrega la columna nueva para importacion masiva:
+
+```sql
+ALTER TABLE programa_apoyo
+ADD COLUMN IF NOT EXISTS pro_retencion BOOLEAN DEFAULT false;
+
+ALTER TABLE alumno
+ADD COLUMN IF NOT EXISTS fecha_actualizacion TIMESTAMP;
+```
+
 Esto genera dos tablas:
 
 - **students**: id, rut (unico), name, grade

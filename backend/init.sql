@@ -40,6 +40,7 @@ CREATE TABLE alumno (
   email VARCHAR(150),
   telefono VARCHAR(20),
   direccion VARCHAR(255),
+  fecha_actualizacion TIMESTAMP,
   codigo_barra VARCHAR(100) UNIQUE, -- NUEVO: Campo único para lector de tarjetas
   activo BOOLEAN DEFAULT true     -- NUEVO: Borrado lógico, en lugar de borrar la fila
 );
@@ -91,7 +92,8 @@ CREATE TABLE programa_apoyo (
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   vulnerable BOOLEAN DEFAULT false,
   prioritario BOOLEAN DEFAULT false,
-  preferente BOOLEAN DEFAULT false
+  preferente BOOLEAN DEFAULT false,
+  pro_retencion BOOLEAN DEFAULT false
 );
 
 CREATE TABLE salud (

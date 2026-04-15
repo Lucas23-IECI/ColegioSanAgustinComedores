@@ -55,7 +55,7 @@ async function setupAndSeed() {
         apoyo: { vulnerable: false, prioritario: false, preferente: true },
         salud: { asma: true, diabetes: false, epilepsia: false, observaciones: 'Usar inhalador Salbutamol en educación física' },
         emergencia: { avisar_a: 'Ana Soto', telefono_emergencia: '+56912345678', trasladar_a: 'Posta Central' },
-        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(nextMonth), motivo: 'Tramo Preferente A', resolucion: 'RES-001' },
+        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(nextMonth), motivo: 'Tramo Preferente A' },
         restricciones: []
       },
       {
@@ -67,7 +67,7 @@ async function setupAndSeed() {
         apoyo: { vulnerable: false, prioritario: false, preferente: false },
         salud: { asma: false, diabetes: false, epilepsia: false, observaciones: null },
         emergencia: { avisar_a: 'Carlos Muñoz', telefono_emergencia: '+56987654321', trasladar_a: 'Clinica Las Condes' },
-        beneficiario: { activo: false, f_ini: null, f_fin: null, motivo: null, resolucion: null },
+        beneficiario: { activo: false, f_ini: null, f_fin: null, motivo: null },
         restricciones: ['Alérgica al maní', 'Celíaca']
       },
       {
@@ -79,7 +79,7 @@ async function setupAndSeed() {
         apoyo: { vulnerable: true, prioritario: true, preferente: false },
         salud: { asma: false, diabetes: true, epilepsia: false, observaciones: 'Insulino dependiente. Requiere medición después de almuerzo.' },
         emergencia: { avisar_a: 'Tia Rosa', telefono_emergencia: '+56944443333', trasladar_a: 'Hospital San José' },
-        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(nextMonth), motivo: 'Vulnerabilidad Extrema', resolucion: 'RES-045' },
+        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(nextMonth), motivo: 'Vulnerabilidad Extrema' },
         restricciones: ['Diabético (Sin azúcar)']
       },
       {
@@ -92,7 +92,7 @@ async function setupAndSeed() {
         apoyo: { vulnerable: false, prioritario: false, preferente: true },
         salud: { asma: false, diabetes: false, epilepsia: false, observaciones: null },
         emergencia: { avisar_a: 'Jose Herrera', telefono_emergencia: '+56922221111', trasladar_a: 'Clinica Alemana' },
-        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(nextMonth), motivo: 'Beneficio antiguo', resolucion: 'RES-099' },
+        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(nextMonth), motivo: 'Beneficio antiguo' },
         restricciones: []
       },
       {
@@ -105,7 +105,7 @@ async function setupAndSeed() {
         apoyo: { vulnerable: false, prioritario: false, preferente: false },
         salud: { asma: false, diabetes: false, epilepsia: true, observaciones: 'Medicada con anticonvulsivantes' },
         emergencia: { avisar_a: 'Laura Lagos', telefono_emergencia: '+56900009999', trasladar_a: 'Sapu Oriente' },
-        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(lastWeek), motivo: 'Apoyo Temporal', resolucion: 'RES-103' },
+        beneficiario: { activo: true, f_ini: formatToDate(lastMonth), f_fin: formatToDate(lastWeek), motivo: 'Apoyo Temporal' },
         restricciones: []
       }
     ];
@@ -160,8 +160,8 @@ async function setupAndSeed() {
       // 5. Beneficio de Alimentación
       if (data.beneficiario.activo || data.beneficiario.f_ini) {
         await pool.query(
-          'INSERT INTO beneficiario_alimentacion (id_alumno, activo, fecha_inicio, fecha_fin, motivo_ingreso, resolucion_asistente_social) VALUES ($1, $2, $3, $4, $5, $6)',
-          [idAlumno, data.beneficiario.activo, data.beneficiario.f_ini, data.beneficiario.f_fin, data.beneficiario.motivo, data.beneficiario.resolucion]
+          'INSERT INTO beneficiario_alimentacion (id_alumno, activo, fecha_inicio, fecha_fin, motivo_ingreso) VALUES ($1, $2, $3, $4, $5)',
+          [idAlumno, data.beneficiario.activo, data.beneficiario.f_ini, data.beneficiario.f_fin, data.beneficiario.motivo]
         );
       }
 

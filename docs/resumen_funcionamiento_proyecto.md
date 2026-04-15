@@ -11,14 +11,19 @@ Configura el Pool de PostgreSQL leyendo variables de backend/.env.
 Define el esquema completo de BD.
 Tablas principales:
 - alumno
+- alumno_complemento
 - curso
 - matricula
 - persona_contacto
+- persona_contacto_detalle
 - relacion_alumno_persona
 - pago
+- pago_detalle
 - programa_apoyo (incluye pro_retencion)
 - salud
+- salud_detalle
 - emergencia
+- emergencia_detalle
 - beneficiario_alimentacion
 - restriccion_dietaria
 - lunch_registrations
@@ -53,6 +58,12 @@ Logica destacada de importacion masiva:
 - si fecha Excel <= fecha BD, omite fila
 - si fecha Excel > fecha BD, sincroniza alumno y tablas relacionadas
 - inserta alumno nuevo con sus datos relacionados cuando no existe en BD
+- persiste columnas Excel sin equivalente directo en tablas normalizadas dentro de:
+   - alumno_complemento
+   - persona_contacto_detalle
+   - salud_detalle
+   - emergencia_detalle
+   - pago_detalle
 
 ### backend/package.json
 Dependencias del backend: express, pg, dotenv, cors, cookie-parser, jsonwebtoken, bcryptjs.
@@ -157,6 +168,9 @@ Incluye migraciones puntuales para BD existente:
 ### docs/estructura_proyecto.md
 Resumen historico/arquitectonico (enfoque frontend alimentacion).
 
+### docs/mapeo_excel_bd.md
+Mapa completo de columnas del Excel `datos_ficticios_alumnos.xlsx` hacia tablas y columnas de BD.
+
 ### docs/resumen_funcionamiento_proyecto.md
 Este documento.
 
@@ -216,6 +230,13 @@ Este documento.
 2. Si fecha Excel < fecha BD: fila omitida con warning.
 3. Si fecha Excel > fecha BD: fila sincronizada.
 4. Si alumno no existe: insercion completa.
+
+## 4.8 Tablas nuevas para campos faltantes del Excel
+1. alumno_complemento: guarda lista, estado, foto, condicionalidad, nacionalidad, religion, opta_religion, cursos_repetidos, colegio_procedencia, retira_titular, retira_suplente, centro_costo, diagnosticos PIE y etnia indigena.
+2. persona_contacto_detalle: guarda fecha_nacimiento, comuna, empresa, telefono_empresa, estudios, profesion y nacionalidad de cada contacto.
+3. salud_detalle: guarda peso, talla, grupo_sangre y banderas de problemas visuales, auditivos, cardiacos y de columna.
+4. emergencia_detalle: guarda seguro, isapre y observaciones adicionales de emergencia.
+5. pago_detalle: guarda co_banco, numero de tarjeta y fecha de vencimiento de tarjeta.
 
 ---
 

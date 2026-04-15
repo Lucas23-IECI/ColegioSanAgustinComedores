@@ -4,13 +4,19 @@ DROP TABLE IF EXISTS estudiantes CASCADE;
 DROP TABLE IF EXISTS students CASCADE;
 DROP TABLE IF EXISTS relacion_alumno_persona CASCADE;
 DROP TABLE IF EXISTS persona_contacto CASCADE;
+DROP TABLE IF EXISTS persona_contacto_detalle CASCADE;
 DROP TABLE IF EXISTS emergencia CASCADE;
+DROP TABLE IF EXISTS emergencia_detalle CASCADE;
 DROP TABLE IF EXISTS salud CASCADE;
+DROP TABLE IF EXISTS salud_detalle CASCADE;
 DROP TABLE IF EXISTS programa_apoyo CASCADE;
 DROP TABLE IF EXISTS pago CASCADE;
+DROP TABLE IF EXISTS pago_detalle CASCADE;
 DROP TABLE IF EXISTS matricula CASCADE;
 DROP TABLE IF EXISTS restriccion_dietaria CASCADE;
 DROP TABLE IF EXISTS beneficiario_alimentacion CASCADE;
+DROP TABLE IF EXISTS alumno_complemento CASCADE;
+DROP TABLE IF EXISTS alumno_excel_snapshot CASCADE;
 DROP TABLE IF EXISTS alumno CASCADE;
 DROP TABLE IF EXISTS curso CASCADE;
 DROP TABLE IF EXISTS nivel_ensenanza CASCADE;
@@ -45,6 +51,27 @@ CREATE TABLE alumno (
   activo BOOLEAN DEFAULT true     -- NUEVO: Borrado lógico, en lugar de borrar la fila
 );
 
+CREATE TABLE alumno_complemento (
+  id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+  lista VARCHAR(50),
+  estado VARCHAR(50),
+  foto VARCHAR(20),
+  condicionalidad VARCHAR(100),
+  nacionalidad VARCHAR(100),
+  religion VARCHAR(100),
+  opta_religion BOOLEAN,
+  cursos_repetidos VARCHAR(100),
+  colegio_procedencia VARCHAR(150),
+  retira_titular VARCHAR(100),
+  retira_suplente VARCHAR(100),
+  centro_costo VARCHAR(50),
+  diagnostico_pie BOOLEAN,
+  diagnostico_pie_escuela_lenguaje BOOLEAN,
+  pie_tipo_discapacidad BOOLEAN,
+  tx_etnia_indigena VARCHAR(100),
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE persona_contacto (
   id_persona SERIAL PRIMARY KEY,
   rut VARCHAR(12) UNIQUE,
@@ -55,6 +82,18 @@ CREATE TABLE persona_contacto (
   telefono VARCHAR(20),
   email VARCHAR(150),
   direccion VARCHAR(255)
+);
+
+CREATE TABLE persona_contacto_detalle (
+  id_persona INT PRIMARY KEY REFERENCES persona_contacto(id_persona) ON DELETE CASCADE,
+  fecha_nacimiento DATE,
+  comuna VARCHAR(100),
+  empresa VARCHAR(150),
+  telefono_empresa VARCHAR(20),
+  estudios VARCHAR(150),
+  profesion VARCHAR(150),
+  nacionalidad VARCHAR(100),
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE relacion_alumno_persona (
@@ -87,6 +126,14 @@ CREATE TABLE pago (
   numero_cuenta VARCHAR(50)
 );
 
+CREATE TABLE pago_detalle (
+  id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+  co_banco VARCHAR(50),
+  nu_tarjeta_bancaria VARCHAR(50),
+  fe_vencimiento_tarjeta DATE,
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE programa_apoyo (
   id_programa SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
@@ -105,12 +152,32 @@ CREATE TABLE salud (
   observaciones TEXT
 );
 
+CREATE TABLE salud_detalle (
+  id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+  peso VARCHAR(20),
+  talla VARCHAR(20),
+  grupo_sangre VARCHAR(10),
+  problemas_visuales BOOLEAN,
+  problemas_auditivos BOOLEAN,
+  problemas_cardiacos BOOLEAN,
+  problemas_columna BOOLEAN,
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE emergencia (
   id_emergencia SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   avisar_a VARCHAR(100),
   telefono_emergencia VARCHAR(20),
   trasladar_a VARCHAR(150)
+);
+
+CREATE TABLE emergencia_detalle (
+  id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+  seguro VARCHAR(100),
+  isapre VARCHAR(100),
+  tx_obs_emergencia TEXT,
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Modulo Alimentación y Autenticación
@@ -124,7 +191,11 @@ CREATE TABLE usuarios (
 CREATE TABLE beneficiario_alimentacion (
   id_beneficiario SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
-  activo BOOLEAN DEFAULT true
+  activo BOOLEAN DEFAULT true,
+  fecha_inicio DATE,
+  fecha_fin DATE,
+  motivo_ingreso VARCHAR(255),
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE restriccion_dietaria (
@@ -133,6 +204,12 @@ CREATE TABLE restriccion_dietaria (
   descripcion VARCHAR(255) NOT NULL,
   vigente BOOLEAN DEFAULT true,
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE alumno_excel_snapshot (
+  id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+  raw_payload JSONB NOT NULL,
+  fecha_importacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE lunch_registrations (

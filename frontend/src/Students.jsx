@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, ChevronLeft, X, HeartPulse, DollarSign, Users, GraduationCap, Database, Upload, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { Search, ChevronLeft, X, HeartPulse, DollarSign, Users, GraduationCap, Database, Upload, FileSpreadsheet, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './index.css';
 
@@ -171,6 +171,11 @@ function Students() {
            s.rut.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  const formatNullable = (value) => {
+    if (value === null || value === undefined || String(value).trim() === '') return 'N/D';
+    return String(value);
+  };
+
   return (
     <div className="app-container">
       <div className="glass-panel" style={{maxWidth: '1000px', width: '100%'}}>
@@ -290,6 +295,7 @@ function Students() {
                      <th style={{padding: '12px', textAlign: 'left'}}>Nombre Completo</th>
                      {selectedCourse === 'Toda La Matrícula' && <th style={{padding: '12px', textAlign: 'left'}}>Curso</th>}
                      <th style={{padding: '12px', textAlign: 'center'}}>Estado Institucional</th>
+                     <th style={{padding: '12px', textAlign: 'center'}}>JUNAEB</th>
                      <th style={{padding: '12px', textAlign: 'right'}}>Acción</th>
                    </tr>
                  </thead>
@@ -303,6 +309,11 @@ function Students() {
                           {s.activo ? 
                             <span style={{background: '#ECFDF5', color: '#059669', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem'}}>Matrícula Activa</span> : 
                             <span style={{background: '#FEF2F2', color: '#DC2626', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem'}}>Baja / Retirado</span>}
+                       </td>
+                       <td style={{padding: '12px', textAlign: 'center'}}>
+                          {s.es_beneficiario ? 
+                            <span style={{background: '#EEF2FF', color: '#4F46E5', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem', display: 'inline-flex', alignItems: 'center', gap:'4px'}}><ShieldCheck size={12}/> Beneficiario</span> : 
+                            <span style={{color: 'var(--text-light)', fontSize:'0.8rem'}}>—</span>}
                        </td>
                        <td style={{padding: '12px', textAlign: 'right'}}>
                           <button onClick={() => openDetails(s.id)} className="action-btn edit">
@@ -441,10 +452,23 @@ function Students() {
                       <span>| Escáner ID: <strong style={{color:'var(--text-dark)'}}>{studentDetails.alumno.codigo_barra}</strong></span>
                     </p>
 
+                    <div style={{background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px'}}>
+                      <h4 style={{margin: '0 0 10px 0', color: 'var(--text-dark)'}}>Datos Generales Alumno</h4>
+                      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '6px 14px', fontSize: '0.92rem', color: 'var(--text-dark)'}}>
+                        <span><strong>Matrícula:</strong> {formatNullable(studentDetails.alumno.matricula)}</span>
+                        <span><strong>Fecha Nacimiento:</strong> {studentDetails.alumno.fecha_nacimiento ? new Date(studentDetails.alumno.fecha_nacimiento).toLocaleDateString('es-CL') : 'N/D'}</span>
+                        <span><strong>Sexo:</strong> {formatNullable(studentDetails.alumno.sexo)}</span>
+                        <span><strong>Email:</strong> {formatNullable(studentDetails.alumno.email)}</span>
+                        <span><strong>Teléfono:</strong> {formatNullable(studentDetails.alumno.telefono)}</span>
+                        <span><strong>Dirección:</strong> {formatNullable(studentDetails.alumno.direccion)}</span>
+                        <span><strong>Actualización:</strong> {studentDetails.alumno.fecha_actualizacion ? new Date(studentDetails.alumno.fecha_actualizacion).toLocaleString('es-CL') : 'N/D'}</span>
+                      </div>
+                    </div>
+
                     <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px'}}>
                        <div style={{background: '#F8FAFC', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0'}}>
                           <h4 style={{display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', marginTop:0}}><Users size={18}/> Contactos de Responsables</h4>
-                          {studentDetails.contactos.map((c, i) => (
+                          {(studentDetails.contactosConDetalle || studentDetails.contactos).map((c, i) => (
                              <div key={i} style={{marginBottom: '15px', fontSize: '0.95rem', color: 'var(--text-dark)', paddingBottom: '10px', borderBottom: '1px solid #E2E8F0'}}>
                                 <strong>{c.tipo_relacion}: {c.nombres} {c.paterno}</strong> {c.es_contacto_principal && <span style={{color: 'var(--primary)', fontSize:'0.8rem'}}>(Tutor Principal)</span>}<br/>
                                 <div style={{marginTop: '4px', color:'var(--text-light)'}}>Tel: {c.telefono} • Email: {c.email || 'N/D'}</div>
@@ -452,9 +476,16 @@ function Students() {
                                   Vive c/ alumno: <strong>{c.vive_con_alumno ? 'Sí':'No'}</strong> | 
                                   Derechos de Fotografía: <strong>{c.autoriza_foto ? 'Concedidos':'Negados'}</strong>
                                 </div>
+                                {c.detalle && (
+                                  <div style={{marginTop: '6px', fontSize: '0.8rem', color: 'var(--text-light)'}}>
+                                    <div>Fecha nac: {c.detalle.fecha_nacimiento ? new Date(c.detalle.fecha_nacimiento).toLocaleDateString('es-CL') : 'N/D'} | Comuna: {formatNullable(c.detalle.comuna)}</div>
+                                    <div>Empresa: {formatNullable(c.detalle.empresa)} | Tel. empresa: {formatNullable(c.detalle.telefono_empresa)}</div>
+                                    <div>Estudios: {formatNullable(c.detalle.estudios)} | Profesión: {formatNullable(c.detalle.profesion)} | Nacionalidad: {formatNullable(c.detalle.nacionalidad)}</div>
+                                  </div>
+                                )}
                              </div>
                           ))}
-                          {studentDetails.contactos.length === 0 && <span style={{fontSize: '0.9rem', color: 'var(--text-light)'}}>Sin información de apoderados.</span>}
+                          {(studentDetails.contactosConDetalle || studentDetails.contactos).length === 0 && <span style={{fontSize: '0.9rem', color: 'var(--text-light)'}}>Sin información de apoderados.</span>}
                        </div>
 
                        <div style={{background: '#FEF2F2', padding: '20px', borderRadius: '12px', border: '1px solid #FECACA'}}>
@@ -477,18 +508,113 @@ function Students() {
                        <div style={{background: '#ECFDF5', padding: '20px', borderRadius: '12px', border: '1px solid #A7F3D0'}}>
                           <h4 style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#059669', marginTop:0}}><DollarSign size={18}/> Status Económico</h4>
                           <div style={{fontSize: '0.95rem', color: 'var(--text-dark)'}}>
-                            <strong>Beca de Alimentación:</strong><br/>
+                            <div style={{marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(5, 150, 105, 0.25)'}}>
+                              <strong>Datos Financieros:</strong>
+                              <div style={{marginTop: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.88rem'}}>
+                                <span><strong>Forma pago:</strong> {formatNullable(studentDetails.finanzas?.forma_pago)}</span>
+                                <span><strong>Banco:</strong> {formatNullable(studentDetails.finanzas?.banco)}</span>
+                                <span><strong>Tipo cuenta:</strong> {formatNullable(studentDetails.finanzas?.tipo_cuenta)}</span>
+                                <span><strong>Número cuenta:</strong> {formatNullable(studentDetails.finanzas?.numero_cuenta)}</span>
+                              </div>
+                            </div>
+
+                            <strong>Beca de Alimentación (JUNAEB):</strong><br/>
                             {studentDetails.beneficios?.activo ? 
-                               <span style={{color: '#059669', fontWeight: 'bold'}}>OFICIAL Y VIGENTE</span> : 
-                               <span style={{color: '#DC2626', fontWeight: 'bold'}}>SIN BENEFICIOS FORMALES</span>}
-                            <br/><br/>
+                               <span style={{color: '#059669', fontWeight: 'bold'}}>✅ OFICIAL Y VIGENTE</span> : 
+                               <span style={{color: '#DC2626', fontWeight: 'bold'}}>❌ SIN BENEFICIOS FORMALES</span>}
+                            
+                            {studentDetails.beneficios && (
+                              <div style={{marginTop: '10px', padding: '10px 12px', background: 'rgba(5, 150, 105, 0.06)', borderRadius: '8px', border: '1px solid rgba(5, 150, 105, 0.15)'}}>
+                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.88rem'}}>
+                                  <span><strong>Desde:</strong> {studentDetails.beneficios.fecha_inicio ? new Date(studentDetails.beneficios.fecha_inicio).toLocaleDateString('es-CL') : 'N/D'}</span>
+                                  <span><strong>Hasta:</strong> {studentDetails.beneficios.fecha_fin ? new Date(studentDetails.beneficios.fecha_fin).toLocaleDateString('es-CL') : 'N/D'}</span>
+                                </div>
+                                {studentDetails.beneficios.motivo_ingreso && (
+                                  <div style={{marginTop: '6px', fontSize: '0.88rem'}}><strong>Motivo:</strong> {studentDetails.beneficios.motivo_ingreso}</div>
+                                )}
+                              </div>
+                            )}
+
+                            {studentDetails.restricciones?.length > 0 && (
+                              <div style={{marginTop: '12px'}}>
+                                <strong>Restricciones Dietarias:</strong>
+                                <ul style={{margin: '6px 0 0 18px', padding: 0}}>
+                                  {studentDetails.restricciones.map((r, i) => (
+                                    <li key={i} style={{color: '#B45309', fontSize: '0.9rem'}}>{r}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            <br/>
                             <strong>Programa de Apoyo Escolar (SEP):</strong><br/>
                             Vulnerable: {studentDetails.apoyo?.vulnerable ? 'Sí':'No'} |
                             Prioritario: {studentDetails.apoyo?.prioritario ? 'Sí':'No'} |
                             Preferente: {studentDetails.apoyo?.preferente ? 'Sí':'No'}
                           </div>
                        </div>
+
+                        <div style={{background: '#F8FAFC', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0'}}>
+                          <h4 style={{marginTop:0, color: 'var(--primary)'}}>Complemento Escolar</h4>
+                          <div style={{fontSize: '0.95rem', color: 'var(--text-dark)', display: 'grid', gap: '6px'}}>
+                           <span><strong>Lista:</strong> {formatNullable(studentDetails.complemento?.lista)}</span>
+                           <span><strong>Estado:</strong> {formatNullable(studentDetails.complemento?.estado)}</span>
+                           <span><strong>Foto:</strong> {formatNullable(studentDetails.complemento?.foto)}</span>
+                           <span><strong>Condicionalidad:</strong> {formatNullable(studentDetails.complemento?.condicionalidad)}</span>
+                           <span><strong>Nacionalidad:</strong> {formatNullable(studentDetails.complemento?.nacionalidad)}</span>
+                           <span><strong>Religión:</strong> {formatNullable(studentDetails.complemento?.religion)}</span>
+                           <span><strong>Opta religión:</strong> {studentDetails.complemento?.opta_religion === null || studentDetails.complemento?.opta_religion === undefined ? 'N/D' : (studentDetails.complemento.opta_religion ? 'Sí' : 'No')}</span>
+                           <span><strong>Colegio procedencia:</strong> {formatNullable(studentDetails.complemento?.colegio_procedencia)}</span>
+                           <span><strong>Centro costo:</strong> {formatNullable(studentDetails.complemento?.centro_costo)}</span>
+                           <span><strong>Retira titular:</strong> {formatNullable(studentDetails.complemento?.retira_titular)}</span>
+                           <span><strong>Retira suplente:</strong> {formatNullable(studentDetails.complemento?.retira_suplente)}</span>
+                           <span><strong>Diagnóstico pie:</strong> {studentDetails.complemento?.diagnostico_pie === null || studentDetails.complemento?.diagnostico_pie === undefined ? 'N/D' : (studentDetails.complemento.diagnostico_pie ? 'Sí' : 'No')}</span>
+                           <span><strong>Escuela lenguaje:</strong> {studentDetails.complemento?.diagnostico_pie_escuela_lenguaje === null || studentDetails.complemento?.diagnostico_pie_escuela_lenguaje === undefined ? 'N/D' : (studentDetails.complemento.diagnostico_pie_escuela_lenguaje ? 'Sí' : 'No')}</span>
+                           <span><strong>Tipo discapacidad pie:</strong> {studentDetails.complemento?.pie_tipo_discapacidad === null || studentDetails.complemento?.pie_tipo_discapacidad === undefined ? 'N/D' : (studentDetails.complemento.pie_tipo_discapacidad ? 'Sí' : 'No')}</span>
+                           <span><strong>Etnia indígena:</strong> {formatNullable(studentDetails.complemento?.tx_etnia_indigena)}</span>
+                          </div>
+                        </div>
+
+                        <div style={{background: '#EFF6FF', padding: '20px', borderRadius: '12px', border: '1px solid #BFDBFE'}}>
+                          <h4 style={{marginTop:0, color: '#2563EB'}}>Salud y Emergencia Extendida</h4>
+                          <div style={{fontSize: '0.95rem', color: 'var(--text-dark)', display: 'grid', gap: '6px'}}>
+                           <div><strong>Peso:</strong> {formatNullable(studentDetails.saludDetalle?.peso)} | <strong>Talla:</strong> {formatNullable(studentDetails.saludDetalle?.talla)} | <strong>Grupo sangre:</strong> {formatNullable(studentDetails.saludDetalle?.grupo_sangre)}</div>
+                           <div><strong>Visuales:</strong> {studentDetails.saludDetalle?.problemas_visuales === null || studentDetails.saludDetalle?.problemas_visuales === undefined ? 'N/D' : (studentDetails.saludDetalle.problemas_visuales ? 'Sí' : 'No')} | <strong>Auditivos:</strong> {studentDetails.saludDetalle?.problemas_auditivos === null || studentDetails.saludDetalle?.problemas_auditivos === undefined ? 'N/D' : (studentDetails.saludDetalle.problemas_auditivos ? 'Sí' : 'No')}</div>
+                           <div><strong>Cardiacos:</strong> {studentDetails.saludDetalle?.problemas_cardiacos === null || studentDetails.saludDetalle?.problemas_cardiacos === undefined ? 'N/D' : (studentDetails.saludDetalle.problemas_cardiacos ? 'Sí' : 'No')} | <strong>Columna:</strong> {studentDetails.saludDetalle?.problemas_columna === null || studentDetails.saludDetalle?.problemas_columna === undefined ? 'N/D' : (studentDetails.saludDetalle.problemas_columna ? 'Sí' : 'No')}</div>
+                           <div><strong>Seguro:</strong> {formatNullable(studentDetails.emergenciaDetalle?.seguro)} | <strong>Isapre:</strong> {formatNullable(studentDetails.emergenciaDetalle?.isapre)}</div>
+                           <div><strong>Obs. emergencia:</strong> {formatNullable(studentDetails.emergenciaDetalle?.tx_obs_emergencia)}</div>
+                          </div>
+                        </div>
+
+                        <div style={{background: '#FFFBEB', padding: '20px', borderRadius: '12px', border: '1px solid #FDE68A'}}>
+                          <h4 style={{marginTop:0, color: '#B45309'}}>Datos Bancarios Extendidos</h4>
+                          <div style={{fontSize: '0.95rem', color: 'var(--text-dark)', display: 'grid', gap: '6px'}}>
+                           <span><strong>Co banco:</strong> {formatNullable(studentDetails.pagoDetalle?.co_banco)}</span>
+                           <span><strong>Número tarjeta:</strong> {formatNullable(studentDetails.pagoDetalle?.nu_tarjeta_bancaria)}</span>
+                           <span><strong>Vencimiento tarjeta:</strong> {studentDetails.pagoDetalle?.fe_vencimiento_tarjeta ? new Date(studentDetails.pagoDetalle.fe_vencimiento_tarjeta).toLocaleDateString('es-CL') : 'N/D'}</span>
+                          </div>
+                        </div>
                     </div>
+
+                    {studentDetails.rawExcel && (
+                      <details style={{marginTop: '16px', background: 'white', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '10px 12px'}}>
+                        <summary style={{cursor: 'pointer', color: 'var(--text-dark)', fontWeight: 600}}>
+                          Ver datos crudos del Excel importado
+                        </summary>
+                        {studentDetails.rawExcelImportedAt && (
+                          <p style={{margin: '8px 0', color: 'var(--text-light)', fontSize: '0.85rem'}}>
+                            Última importación: {new Date(studentDetails.rawExcelImportedAt).toLocaleString('es-CL')}
+                          </p>
+                        )}
+                        <div style={{marginTop: '8px', maxHeight: '260px', overflowY: 'auto', border: '1px solid #E5E7EB', borderRadius: '8px', padding: '8px 10px'}}>
+                          {Object.entries(studentDetails.rawExcel).map(([key, value]) => (
+                            <div key={key} style={{padding: '4px 0', borderBottom: '1px solid #F1F5F9', fontSize: '0.88rem', color: 'var(--text-dark)'}}>
+                              <strong>{key}:</strong> {formatNullable(value)}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                  </div>
               ) : null}
            </div>

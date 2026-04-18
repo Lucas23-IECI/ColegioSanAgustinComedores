@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from './context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { List, Clock, LogOut } from 'lucide-react';
+import { Clock, LogOut, Utensils, Coffee, Maximize2, Minimize2 } from 'lucide-react';
 import BarcodeScanner from './components/BarcodeScanner';
-import HistoryPanel from './components/HistoryPanel';
 import './index.css';
 
 function getAutoMealType() {
@@ -20,46 +19,71 @@ function App() {
   const { logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [clockTime, setClockTime] = useState(formatClock());
-  const [showHistory, setShowHistory] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
 
   useEffect(() => {
-    const interval = setInterval(() => setClockTime(formatClock()), 30000);
+    const interval = setInterval(() => setClockTime(formatClock()), 1000);
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const mealType = getAutoMealType();
+  const mealClass = mealType === 'Desayuno' ? 'kiosk-desayuno' : 'kiosk-almuerzo';
+  const MealIcon = mealType === 'Desayuno' ? Coffee : Utensils;
+
   return (
-    <div className="app-container">
-      <div className="glass-panel">
+    <div className={`kiosk-mode ${mealClass}`}>
+      <div className="kiosk-panel">
+        <div className="kiosk-panel-inner">
         
-        {/* Cabecera Centralizada */}
-        <header className="header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <div>
-            <h1>Lector de Alimentación</h1>
-            <div className="header-clock">
-              <Clock size={14} />
-              <span>{clockTime} — {getAutoMealType()}</span>
+          <header className="kiosk-header">
+            <div className="kiosk-title-group">
+              <MealIcon size={36} strokeWidth={2.2} />
+              <div>
+                <h1>{mealType}</h1>
+                <div className="kiosk-meal-subtitle">
+                  {mealType === 'Desayuno' ? 'Servicio matutino' : 'Servicio mediodía'}
+                </div>
+              </div>
             </div>
-          </div>
-          <button onClick={() => { logout(); navigate('/login'); }} className="action-btn cancel" style={{display: 'flex', gap: '4px'}}>
-            <LogOut size={16}/> Salir
-          </button>
-        </header>
+            <div className="kiosk-header-right">
+              <div className="kiosk-clock">
+                <Clock size={16} />
+                <span>{clockTime}</span>
+              </div>
+              <button
+                onClick={toggleFullscreen}
+                className="kiosk-logout-btn"
+                title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              >
+                {isFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}
+              </button>
+              <button 
+                onClick={() => { logout(); navigate('/login'); }} 
+                className="kiosk-logout-btn"
+                title="Cerrar sesión"
+              >
+                <LogOut size={16}/>
+              </button>
+            </div>
+          </header>
 
-        {/* Módulo Escáner Independiente */}
-        <BarcodeScanner />
+          <BarcodeScanner />
 
-        {/* Controles y Panel de Historial Independiente */}
-        <button 
-          className="toggle-view-btn" 
-          onClick={() => setShowHistory(!showHistory)} 
-          style={{marginTop: '20px'}}
-        >
-          <List size={18} />
-          {showHistory ? 'Ocultar Historial del Día' : 'Ver Historial'}
-        </button>
-
-        {showHistory && <HistoryPanel />}
-
+        </div>
       </div>
     </div>
   );

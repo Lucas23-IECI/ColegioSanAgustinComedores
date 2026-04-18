@@ -1,6 +1,6 @@
 services:
 
-  # ── Base de datos PostgreSQL ─────────────────────────────────────────────────
+  # ── 1. Base de datos ─────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: colegio_db
@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Backend Express ──────────────────────────────────────────────────────────
+  # ── 2. Backend Express ───────────────────────────────────────────────────────
   backend:
     build: ./backend
     container_name: colegio_backend
@@ -35,7 +35,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN}
       PORT:        5000
 
-  # ── Frontend React (build + nginx) ──────────────────────────────────────────
+  # ── 3. Frontend React + nginx (build estático + proxy /api → backend) ─────────
   frontend:
     build:
       context: ./frontend
@@ -43,10 +43,10 @@ services:
         VITE_API_URL: /api
     container_name: colegio_frontend
     restart: unless-stopped
-    depends_on:
-      - backend
     ports:
       - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

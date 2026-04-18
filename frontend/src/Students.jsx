@@ -4,7 +4,7 @@ import { Search, ChevronLeft, X, HeartPulse, DollarSign, Users, GraduationCap, D
 import { useNavigate } from 'react-router-dom';
 import './index.css';
 
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from './config';
 
 const normalizeHeaderKey = (value) => {
   return String(value || '')

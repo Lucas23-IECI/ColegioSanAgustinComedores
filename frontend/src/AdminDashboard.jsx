@@ -9,7 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import HistoryPanel from './components/HistoryPanel';
 
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from './config';
 
 const REPORT_TYPES = [
   { id: 'general', label: 'Asistencia General', desc: 'Todos los alumnos — Almuerzo (A) y Desayuno (D) por día', icon: <Users size={18} /> },

@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Search, CheckCircle, AlertCircle, Utensils, Coffee, Zap, ZapOff, Activity, User, ChevronRight, Columns, AlignCenter, Sparkles, ShieldCheck, GraduationCap, Clock, Filter, X } from 'lucide-react';
 import { playBeep } from '../utils/audioNotifier';
-
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../config';
 
 function getAutoMealType() {
   const hour = new Date().getHours();

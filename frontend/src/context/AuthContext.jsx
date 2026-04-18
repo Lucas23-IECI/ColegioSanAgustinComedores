@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_URL } from '../config';
 
 // Establece que Axios incluya siempre las cookies HttpOnly
 axios.defaults.withCredentials = true;
@@ -14,7 +15,7 @@ export const AuthProvider = ({ children }) => {
     // Intentar restaurar la sesión desde el backend a través de la cookie HttpOnly
     const checkSession = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/auth/me');
+        const res = await axios.get(`${API_URL}/auth/me`);
         setUser(res.data.user);
       } catch (err) {
         setUser(null); // No hay cookie válida
@@ -27,7 +28,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (correo, password) => {
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', { correo, password });
+      const res = await axios.post(`${API_URL}/auth/login`, { correo, password });
       setUser(res.data.user);
       return true;
     } catch (error) {
@@ -37,7 +38,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post('http://localhost:5000/api/auth/logout');
+      await axios.post(`${API_URL}/auth/logout`);
     } catch (err) { }
     setUser(null);
   };

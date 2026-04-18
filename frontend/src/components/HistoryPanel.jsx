@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Download, Filter, Calendar } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../config';
 
 const HistoryPanel = ({ onUnmount }) => {
   const [historyList, setHistoryList] = useState([]);

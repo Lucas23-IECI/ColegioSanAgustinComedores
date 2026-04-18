@@ -811,6 +811,63 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Logout exitoso' });
 });
 
+// === BÚSQUEDA INTELIGENTE (Lector o Admin) ===
+// Busca por RUT parcial, código de barra, o nombre. Máximo 10 resultados.
+app.get('/api/students/search', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
+  const { q } = req.query;
+  if (!q || q.trim().length < 2) return res.json([]);
+
+  const term = q.trim();
+
+  try {
+    // Detectar si parece RUT (tiene números y puede tener puntos/guión)
+    const cleanedRut = term.replace(/\./g, '').replace(/-/g, '');
+    const looksLikeRut = /^\d{1,9}$/.test(cleanedRut);
+
+    let query, params;
+
+    if (looksLikeRut) {
+      // Buscar por RUT parcial o código de barra
+      query = `
+        SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE a.activo = true
+          AND (a.rut LIKE $1 OR a.codigo_barra LIKE $1)
+        ORDER BY a.paterno, a.nombres
+        LIMIT 10
+      `;
+      params = [`%${cleanedRut}%`];
+    } else {
+      // Buscar por nombre (paterno, materno o nombres) — ILIKE para case-insensitive
+      const searchTerm = `%${term}%`;
+      query = `
+        SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE a.activo = true
+          AND (
+            a.nombres ILIKE $1
+            OR a.paterno ILIKE $1
+            OR a.materno ILIKE $1
+            OR CONCAT(a.nombres, ' ', a.paterno, ' ', a.materno) ILIKE $1
+          )
+        ORDER BY a.paterno, a.nombres
+        LIMIT 10
+      `;
+      params = [searchTerm];
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error en búsqueda' });
+  }
+});
+
 // === ALUMNOS Y ESCÁNER (Lector o Admin) ===
 app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
   const { barcode } = req.params;
@@ -836,12 +893,14 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
       return res.status(403).json({ message: 'Alumno Inactivo en el sistema. Prohibido registrar consumos.', alumno_inactivo: true });
     }
 
-    // REVISAR FECHAS DE BENEFICIO: Ahora valida la ventana de tiempo del beneficio social.
+    // REVISAR FECHAS DE BENEFICIO: Valida activo + ventana de tiempo
     const queryBenef = `
       SELECT activo, fecha_inicio, fecha_fin, motivo_ingreso
       FROM beneficiario_alimentacion 
       WHERE id_alumno = $1 
         AND activo = true
+        AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_DATE)
+        AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_DATE)
     `;
     const resBenef = await pool.query(queryBenef, [alumno.id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
@@ -877,6 +936,62 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
   }
 });
 
+// === STATUS DE ALUMNO POR ID (para selección manual desde búsqueda) ===
+app.get('/api/students/:id/status', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
+  const { id } = req.params;
+  const { tipo_alimentacion } = req.query;
+  const tipoAlimentacionNormalizado = (tipo_alimentacion || '').toString().trim().toLowerCase();
+
+  try {
+    const queryAlumno = `
+      SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.activo as alumno_activo, c.nombre_curso
+      FROM alumno a
+      LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+      LEFT JOIN curso c ON m.id_curso = c.id_curso
+      WHERE a.id_alumno = $1
+    `;
+    const resultAlumno = await pool.query(queryAlumno, [id]);
+    if (resultAlumno.rows.length === 0) {
+      return res.status(404).json({ message: 'Alumno no encontrado' });
+    }
+    const alumno = resultAlumno.rows[0];
+
+    if (!alumno.alumno_activo) {
+      return res.status(403).json({ message: 'Alumno Inactivo en el sistema. Prohibido registrar consumos.', alumno_inactivo: true });
+    }
+
+    const queryBenef = `
+      SELECT activo, fecha_inicio, fecha_fin, motivo_ingreso
+      FROM beneficiario_alimentacion 
+      WHERE id_alumno = $1 AND activo = true
+        AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_DATE)
+        AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_DATE)
+    `;
+    const resBenef = await pool.query(queryBenef, [alumno.id_alumno]);
+    const esBeneficiario = resBenef.rows.length > 0;
+    const beneficioDetalle = resBenef.rows[0] || null;
+
+    const queryRestric = `SELECT descripcion FROM restriccion_dietaria WHERE id_alumno = $1 AND vigente = true`;
+    const resRestric = await pool.query(queryRestric, [alumno.id_alumno]);
+    const restricciones = resRestric.rows.map(r => r.descripcion);
+
+    let alreadyRegistered = false;
+    if (tipoAlimentacionNormalizado) {
+      const queryCheck = `
+        SELECT id_registro FROM lunch_registrations 
+        WHERE id_alumno = $1 AND LOWER(tipo_alimentacion) = $2 AND fecha_entrega = CURRENT_DATE
+      `;
+      const resCheck = await pool.query(queryCheck, [alumno.id_alumno, tipoAlimentacionNormalizado]);
+      alreadyRegistered = resCheck.rows.length > 0;
+    }
+
+    res.json({ alumno, esBeneficiario, beneficioDetalle, restricciones, alreadyRegistered });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Error del servidor');
+  }
+});
+
 // === REALIZAR REGISTRO ===
 app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
   const { id_alumno, tipo_alimentacion } = req.body;
@@ -893,9 +1008,21 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
     const queryBenef = `
       SELECT activo FROM beneficiario_alimentacion 
       WHERE id_alumno = $1 AND activo = true
+        AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_DATE)
+        AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_DATE)
     `;
     const resBenef = await pool.query(queryBenef, [id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
+
+    // Protección contra duplicados: verificar si ya existe registro hoy
+    const queryDupCheck = `
+      SELECT id_registro FROM lunch_registrations 
+      WHERE id_alumno = $1 AND LOWER(tipo_alimentacion) = $2 AND fecha_entrega = CURRENT_DATE
+    `;
+    const resDup = await pool.query(queryDupCheck, [id_alumno, tipoAlimentacionNormalizado]);
+    if (resDup.rows.length > 0) {
+      return res.status(409).json({ message: 'Ya registrado para hoy', duplicate: true });
+    }
 
     const queryInsert = `
       INSERT INTO lunch_registrations (id_alumno, tipo_alimentacion, es_beneficiario_al_momento)
@@ -1004,6 +1131,42 @@ app.get('/api/admin/reportes/recurrentes', verifyToken, verifyRole(['admin']), a
   } catch(err) {
     console.error(err.message);
     res.status(500).send('Error');
+  }
+});
+
+// (Ruta duplicada eliminada — la búsqueda principal está arriba en /api/students/search)
+
+// === CONTADOR DE REGISTROS DEL DÍA (para vista kiosco) ===
+app.get('/api/lunches/today-count', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT COUNT(*) as total FROM lunch_registrations WHERE fecha_entrega = CURRENT_DATE`);
+    res.json({ total: parseInt(result.rows[0].total, 10) });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Error');
+  }
+});
+
+// === STATS DEL DÍA (total + beneficiarios) ===
+app.get('/api/lunches/today-stats', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE es_beneficiario_al_momento = true) as beneficiarios,
+        COUNT(*) FILTER (WHERE es_beneficiario_al_momento = false OR es_beneficiario_al_momento IS NULL) as no_beneficiarios
+      FROM lunch_registrations 
+      WHERE fecha_entrega = CURRENT_DATE
+    `);
+    const row = result.rows[0];
+    res.json({
+      total: parseInt(row.total, 10),
+      beneficiarios: parseInt(row.beneficiarios, 10),
+      noBeneficiarios: parseInt(row.no_beneficiarios, 10)
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Error' });
   }
 });
 

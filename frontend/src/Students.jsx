@@ -177,11 +177,11 @@ function Students() {
   };
 
   return (
-    <div className="app-container">
-      <div className="glass-panel" style={{maxWidth: '1000px', width: '100%'}}>
+    <div className="students-page">
+      <div className="students-card">
         
-        <header style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
-           <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+        <header className="students-header">
+           <div className="students-header-left">
               <button 
                 onClick={() => {
                    if (selectedCourse) {
@@ -194,46 +194,33 @@ function Students() {
                    }
                    navigate('/admin');
                 }} 
-                className="action-btn" 
-                style={{backgroundColor: 'rgba(79, 70, 229, 0.1)', padding: '8px', color: 'var(--primary)', border: '1px solid rgba(79, 70, 229, 0.2)'}}
+                className="students-back-btn"
               >
                 <ChevronLeft size={20} />
               </button>
-              <h2 style={{color: 'var(--text-dark)', margin: 0}}>
+              <h1 className="students-title">
                  {activeSection === 'listado'
                    ? (selectedCourse ? `Alumnos: ${selectedCourse}` : 'Listado de Cursos')
                    : 'Carga de BD de Estudiantes'}
-              </h2>
+              </h1>
            </div>
         </header>
 
-        <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap'}}>
+        <div className="students-tabs">
           <button
-            className="action-btn"
+            className={`students-tab ${activeSection === 'listado' ? 'active' : ''}`}
             onClick={() => {
               setActiveSection('listado');
               setUploadError('');
-            }}
-            style={{
-              padding: '10px 14px',
-              background: activeSection === 'listado' ? 'var(--primary)' : 'white',
-              color: activeSection === 'listado' ? 'white' : 'var(--text-dark)',
-              border: activeSection === 'listado' ? '1px solid var(--primary)' : '1px solid rgba(0,0,0,0.08)'
             }}
           >
             <Users size={16} /> Listado de Estudiantes
           </button>
           <button
-            className="action-btn"
+            className={`students-tab ${activeSection === 'carga' ? 'active' : ''}`}
             onClick={() => {
               setActiveSection('carga');
               setSelectedCourse(null);
-            }}
-            style={{
-              padding: '10px 14px',
-              background: activeSection === 'carga' ? 'var(--primary)' : 'white',
-              color: activeSection === 'carga' ? 'white' : 'var(--text-dark)',
-              border: activeSection === 'carga' ? '1px solid var(--primary)' : '1px solid rgba(0,0,0,0.08)'
             }}
           >
             <Database size={16} /> Carga de BD
@@ -287,37 +274,37 @@ function Students() {
                </div>
              </div>
 
-             <div style={{overflowX: 'auto'}}>
-               <table style={{width: '100%', color: 'var(--text-dark)', borderCollapse: 'collapse'}}>
+             <div className="students-table-wrap">
+               <table className="students-table">
                  <thead>
-                   <tr style={{borderBottom: '1px solid rgba(0,0,0,0.1)'}}>
-                     <th style={{padding: '12px', textAlign: 'left'}}>RUT</th>
-                     <th style={{padding: '12px', textAlign: 'left'}}>Nombre Completo</th>
-                     {selectedCourse === 'Toda La Matrícula' && <th style={{padding: '12px', textAlign: 'left'}}>Curso</th>}
-                     <th style={{padding: '12px', textAlign: 'center'}}>Estado Institucional</th>
-                     <th style={{padding: '12px', textAlign: 'center'}}>JUNAEB</th>
-                     <th style={{padding: '12px', textAlign: 'right'}}>Acción</th>
+                   <tr>
+                     <th>RUT</th>
+                     <th>Nombre Completo</th>
+                     {selectedCourse === 'Toda La Matrícula' && <th>Curso</th>}
+                     <th style={{textAlign: 'center'}}>Estado</th>
+                     <th style={{textAlign: 'center'}}>JUNAEB</th>
+                     <th style={{textAlign: 'right'}}>Acción</th>
                    </tr>
                  </thead>
                  <tbody>
                    {filtered.map(s => (
-                     <tr key={s.id} style={{borderBottom: '1px solid rgba(0,0,0,0.05)'}}>
-                       <td style={{padding: '12px'}}>{s.rut}</td>
-                       <td style={{padding: '12px'}}>{s.name}</td>
-                       {selectedCourse === 'Toda La Matrícula' && <td style={{padding: '12px'}}>{s.grade || 'Sin Curso'}</td>}
-                       <td style={{padding: '12px', textAlign: 'center'}}>
-                          {s.activo ? 
-                            <span style={{background: '#ECFDF5', color: '#059669', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem'}}>Matrícula Activa</span> : 
-                            <span style={{background: '#FEF2F2', color: '#DC2626', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem'}}>Baja / Retirado</span>}
+                     <tr key={s.id}>
+                       <td className="students-cell-mono">{s.rut}</td>
+                       <td className="students-cell-name">{s.name}</td>
+                       {selectedCourse === 'Toda La Matrícula' && <td>{s.grade || 'Sin Curso'}</td>}
+                       <td style={{textAlign: 'center'}}>
+                          <span className={`students-badge ${s.activo ? 'badge-active' : 'badge-inactive'}`}>
+                            {s.activo ? 'Activa' : 'Retirado'}
+                          </span>
                        </td>
-                       <td style={{padding: '12px', textAlign: 'center'}}>
+                       <td style={{textAlign: 'center'}}>
                           {s.es_beneficiario ? 
-                            <span style={{background: '#EEF2FF', color: '#4F46E5', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem', display: 'inline-flex', alignItems: 'center', gap:'4px'}}><ShieldCheck size={12}/> Beneficiario</span> : 
-                            <span style={{color: 'var(--text-light)', fontSize:'0.8rem'}}>—</span>}
+                            <span className="students-badge badge-junaeb"><ShieldCheck size={12}/> Beneficiario</span> : 
+                            <span style={{color: 'var(--text-light)', fontSize:'0.82rem'}}>—</span>}
                        </td>
-                       <td style={{padding: '12px', textAlign: 'right'}}>
-                          <button onClick={() => openDetails(s.id)} className="action-btn edit">
-                            Ver Ficha Local
+                       <td style={{textAlign: 'right'}}>
+                          <button onClick={() => openDetails(s.id)} className="students-ficha-btn">
+                            Ver Ficha
                           </button>
                        </td>
                      </tr>

@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
-import { Utensils, AlertCircle } from 'lucide-react';
+import { Utensils, AlertCircle, Mail, Lock } from 'lucide-react';
 import './index.css';
 
 const Login = () => {
@@ -19,8 +19,6 @@ const Login = () => {
 
     try {
       await login(correo, password);
-      // Determine where to go based on the user's role: we need the user role string from localstorage 
-      // but simpler: navigate to root, the wrapper will redirect to admin if role == admin.
       navigate('/');
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -34,44 +32,48 @@ const Login = () => {
   };
 
   return (
-    <div className="app-container" style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-      <div className="glass-panel" style={{maxWidth: '400px', width: '100%'}}>
-        <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
-          <Utensils size={40} style={{color: 'white', marginBottom: '8px'}} />
-          <h2 style={{color: 'white', fontWeight: '600'}}>Sistema de Colaciones</h2>
-          <p style={{color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem'}}>Colegio San Agustín</p>
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <div className="login-icon">
+            <Utensils size={32} />
+          </div>
+          <h1 className="login-title">Sistema de Colaciones</h1>
+          <p className="login-subtitle">Colegio San Agustín</p>
         </div>
 
         {errorMsg && (
-          <div className="alert error fade-in" style={{marginBottom: '1rem'}}>
-            <AlertCircle size={20} />
+          <div className="login-error fade-in">
+            <AlertCircle size={18} />
             <span>{errorMsg}</span>
           </div>
         )}
 
-        <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-          <div className="input-group">
+        <form onSubmit={handleLogin} className="login-form">
+          <div className="login-input-wrapper">
+            <Mail size={18} className="login-input-icon" />
             <input
               type="email"
+              className="login-input"
               placeholder="Correo electrónico"
               value={correo}
               onChange={(e) => setCorreo(e.target.value)}
               required
-              style={{width: '100%', marginBottom: 0}}
             />
           </div>
-          <div className="input-group">
+          <div className="login-input-wrapper">
+            <Lock size={18} className="login-input-icon" />
             <input
               type="password"
+              className="login-input"
               placeholder="Contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              style={{width: '100%'}}
             />
           </div>
 
-          <button type="submit" className="search-btn" disabled={loading} style={{width: '100%', justifyContext: 'center'}}>
+          <button type="submit" className="login-btn" disabled={loading}>
             {loading ? 'Ingresando...' : 'Iniciar Sesión'}
           </button>
         </form>

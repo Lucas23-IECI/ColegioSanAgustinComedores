@@ -12,8 +12,12 @@ const { verifyToken, verifyRole, JWT_SECRET } = require('./middleware/auth');
 
 const app = express();
 // Configuracion de CORS vital para aceptar cookies del puerto de React
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(o => o.trim());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());

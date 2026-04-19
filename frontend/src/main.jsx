@@ -8,6 +8,7 @@ import Students from './Students.jsx'
 import Login from './Login.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
 import AdminHub from './AdminHub.jsx'
+import BeneficiariosAdmin from './BeneficiariosAdmin.jsx'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useContext(AuthContext);
@@ -44,6 +45,7 @@ createRoot(document.getElementById('root')).render(
           {/* Admin Tree */}
           <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminHub /></ProtectedRoute>} />
           <Route path="/admin/alimentacion" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/beneficiarios" element={<ProtectedRoute allowedRoles={['admin']}><BeneficiariosAdmin /></ProtectedRoute>} />
           <Route path="/admin/estudiantes" element={<ProtectedRoute allowedRoles={['admin']}><Students /></ProtectedRoute>} />
           
         </Routes>

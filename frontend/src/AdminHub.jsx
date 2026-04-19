@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Utensils, Users, LogOut, ChevronRight } from 'lucide-react';
+import { Utensils, Users, LogOut, ChevronRight, ShieldCheck } from 'lucide-react';
 import { AuthContext } from './context/AuthContext';
 
 const modules = [
@@ -12,6 +12,15 @@ const modules = [
     path: '/admin/alimentacion',
     color: '#4F46E5',
     bg: 'rgba(79, 70, 229, 0.08)',
+  },
+  {
+    key: 'beneficiarios',
+    icon: ShieldCheck,
+    title: 'Beneficiarios',
+    description: 'Alta, edición y carga Excel de beneficiarios con colaciones retroactivas.',
+    path: '/admin/beneficiarios',
+    color: '#059669',
+    bg: 'rgba(5, 150, 105, 0.08)',
   },
   {
     key: 'estudiantes',

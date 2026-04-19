@@ -190,8 +190,8 @@ CREATE TABLE usuarios (
 
 CREATE TABLE beneficiario_alimentacion (
   id_beneficiario SERIAL PRIMARY KEY,
-  id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
-  activo BOOLEAN DEFAULT true,
+  id_alumno INT NOT NULL REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+  activo BOOLEAN NOT NULL DEFAULT true,
   fecha_inicio DATE,
   fecha_fin DATE,
   motivo_ingreso VARCHAR(255),

@@ -20,7 +20,7 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 app.use(cookieParser());
 
 const PORT = process.env.PORT || 5000;
@@ -135,6 +135,21 @@ const ensureExcelDerivedTables = async () => {
       fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS beneficiario_alimentacion (
+      id_beneficiario SERIAL PRIMARY KEY,
+      id_alumno INT NOT NULL REFERENCES alumno(id_alumno) ON DELETE CASCADE,
+      activo BOOLEAN NOT NULL DEFAULT true,
+      fecha_inicio DATE,
+      fecha_fin DATE,
+      motivo_ingreso VARCHAR(255),
+      fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`ALTER TABLE beneficiario_alimentacion ALTER COLUMN id_alumno SET NOT NULL`);
+  await pool.query(`ALTER TABLE beneficiario_alimentacion ALTER COLUMN activo SET NOT NULL`);
 };
 
 const sanitizeText = (value) => {
@@ -766,6 +781,218 @@ const parseStudentRow = (row) => {
   };
 };
 
+const parseBeneficiaryImportMonth = (monthValue) => {
+  const cleaned = sanitizeText(monthValue);
+  if (!cleaned) return null;
+
+  const match = cleaned.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+
+  const lastDay = new Date(Date.UTC(year, month, 0));
+  return {
+    year,
+    month,
+    monthKey: `${year}-${String(month).padStart(2, '0')}`,
+    firstDay: `${year}-${String(month).padStart(2, '0')}-01`,
+    lastDay: lastDay.toISOString().slice(0, 10),
+    daysInMonth: lastDay.getUTCDate()
+  };
+};
+
+const isTruthyExcelMark = (value) => {
+  const normalized = sanitizeText(value).toLowerCase();
+  if (!normalized) return false;
+  return !['0', 'no', 'n', 'false', '-'].includes(normalized);
+};
+
+const resolveBeneficiaryStudent = async (client, row) => {
+  const directId = parseInt(row.id_alumno ?? row.idAlumno ?? row.alumno_id, 10);
+  if (Number.isInteger(directId) && directId > 0) {
+    const byId = await client.query(
+      `
+        SELECT a.id_alumno, a.rut, a.nombres, a.paterno, a.materno, a.email, c.nombre_curso
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE a.id_alumno = $1
+        LIMIT 1
+      `,
+      [directId]
+    );
+    if (byId.rows[0]) return byId.rows[0];
+  }
+
+  const rut = sanitizeText(row.rut || row.RUT || row.run || row['rut alumno'] || row['run alumno']).replace(/[.\s]/g, '');
+  if (rut) {
+    const byRut = await client.query(
+      `
+        SELECT a.id_alumno, a.rut, a.nombres, a.paterno, a.materno, a.email, c.nombre_curso
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE REPLACE(LOWER(a.rut), '-', '') = REPLACE(LOWER($1), '-', '')
+        LIMIT 1
+      `,
+      [rut]
+    );
+    if (byRut.rows[0]) return byRut.rows[0];
+  }
+
+  const email = sanitizeText(row.email || row.correo || row.mail);
+  if (email) {
+    const byEmail = await client.query(
+      `
+        SELECT a.id_alumno, a.rut, a.nombres, a.paterno, a.materno, a.email, c.nombre_curso
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE LOWER(a.email) = LOWER($1)
+        LIMIT 1
+      `,
+      [email]
+    );
+    if (byEmail.rows[0]) return byEmail.rows[0];
+  }
+
+  const barcode = sanitizeText(row.codigo_barra || row.codigoBarra || row.barcode);
+  if (barcode) {
+    const byBarcode = await client.query(
+      `
+        SELECT a.id_alumno, a.rut, a.nombres, a.paterno, a.materno, a.email, c.nombre_curso
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE LOWER(a.codigo_barra) = LOWER($1)
+        LIMIT 1
+      `,
+      [barcode]
+    );
+    if (byBarcode.rows[0]) return byBarcode.rows[0];
+  }
+
+  const nombres = sanitizeText(row.nombre || row.nombres || row.name);
+  const apellidos = sanitizeText(row.apellidos || row.apellido || row.paterno);
+  const curso = sanitizeText(row.curso || row.grade || row.nombre_curso);
+
+  if (!nombres || !apellidos) return null;
+
+  const params = [nombres, apellidos];
+  let courseClause = '';
+  if (curso) {
+    params.push(curso);
+    courseClause = ' AND LOWER(COALESCE(c.nombre_curso, \'\')) = LOWER($3) ';
+  }
+
+  const byName = await client.query(
+    `
+      SELECT a.id_alumno, a.rut, a.nombres, a.paterno, a.materno, a.email, c.nombre_curso
+      FROM alumno a
+      LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+      LEFT JOIN curso c ON m.id_curso = c.id_curso
+      WHERE LOWER(a.nombres) = LOWER($1)
+        AND LOWER(TRIM(CONCAT_WS(' ', a.paterno, COALESCE(a.materno, '')))) = LOWER($2)
+        ${courseClause}
+      ORDER BY a.id_alumno ASC
+      LIMIT 1
+    `,
+    params
+  );
+
+  return byName.rows[0] || null;
+};
+
+const upsertBeneficiaryRecord = async (client, idAlumno, payload) => {
+  const existingRes = await client.query(
+    `
+      SELECT id_beneficiario, id_alumno, activo, fecha_inicio, fecha_fin, motivo_ingreso
+      FROM beneficiario_alimentacion
+      WHERE id_alumno = $1
+      LIMIT 1
+    `,
+    [idAlumno]
+  );
+
+  const existing = existingRes.rows[0];
+  if (!existing) {
+    const inserted = await client.query(
+      `
+        INSERT INTO beneficiario_alimentacion (id_alumno, activo, fecha_inicio, fecha_fin, motivo_ingreso)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+      `,
+      [idAlumno, payload.activo, payload.fecha_inicio, payload.fecha_fin, payload.motivo_ingreso]
+    );
+    return { action: 'inserted', row: inserted.rows[0] };
+  }
+
+  const nextPayload = {
+    activo: payload.activo,
+    fecha_inicio: payload.fecha_inicio,
+    fecha_fin: payload.fecha_fin,
+    motivo_ingreso: payload.motivo_ingreso
+  };
+
+  const changedKeys = Object.keys(nextPayload).filter((key) => valuesAreDifferent(existing[key], nextPayload[key]));
+  if (changedKeys.length === 0) {
+    return { action: 'unchanged', row: existing };
+  }
+
+  const setClause = changedKeys.map((key, index) => `${key} = $${index + 1}`).join(', ');
+  const values = changedKeys.map((key) => nextPayload[key]);
+  const updated = await client.query(
+    `
+      UPDATE beneficiario_alimentacion
+      SET ${setClause}
+      WHERE id_beneficiario = $${changedKeys.length + 1}
+      RETURNING *
+    `,
+    [...values, existing.id_beneficiario]
+  );
+
+  return { action: 'updated', row: updated.rows[0] };
+};
+
+const importLunchRegistrationsFromBeneficiaries = async (client, idAlumno, monthInfo, mealMarks) => {
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const meal of mealMarks) {
+    if (!meal || !meal.date || !meal.tipo_alimentacion) continue;
+
+    const existing = await client.query(
+      `
+        SELECT id_registro
+        FROM lunch_registrations
+        WHERE id_alumno = $1
+          AND fecha_entrega = $2
+          AND LOWER(tipo_alimentacion) = LOWER($3)
+        LIMIT 1
+      `,
+      [idAlumno, meal.date, meal.tipo_alimentacion]
+    );
+
+    if (existing.rows.length > 0) {
+      skipped++;
+      continue;
+    }
+
+    await client.query(
+      `
+        INSERT INTO lunch_registrations (id_alumno, fecha_entrega, tipo_alimentacion, es_beneficiario_al_momento)
+        VALUES ($1, $2, $3, true)
+      `,
+      [idAlumno, meal.date, meal.tipo_alimentacion.toLowerCase()]
+    );
+    inserted++;
+  }
+
+  return { inserted, skipped, month: monthInfo.monthKey };
+};
+
 // === AUTENTICACIÓN ===
 app.post('/api/auth/login', async (req, res) => {
   const { correo, password } = req.body;
@@ -1239,6 +1466,215 @@ app.get('/api/students', verifyToken, verifyRole(['admin']), async (req, res) =>
   } catch(err) {
     console.error(err.message);
     res.status(500).send('Error');
+  }
+});
+
+app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (req, res) => {
+  try {
+    const query = `
+      WITH beneficiarios_ordenados AS (
+        SELECT DISTINCT ON (b.id_alumno)
+          b.id_beneficiario,
+          b.id_alumno,
+          b.activo,
+          b.fecha_inicio,
+          b.fecha_fin,
+          b.motivo_ingreso,
+          b.fecha_registro
+        FROM beneficiario_alimentacion b
+        ORDER BY b.id_alumno, b.fecha_registro DESC, b.id_beneficiario DESC
+      )
+      SELECT
+        bo.id_beneficiario,
+        bo.id_alumno,
+        bo.activo,
+        bo.fecha_inicio,
+        bo.fecha_fin,
+        bo.motivo_ingreso,
+        bo.fecha_registro,
+        a.rut,
+        a.nombres,
+        a.paterno,
+        a.materno,
+        a.email,
+        a.activo AS alumno_activo,
+        c.nombre_curso
+      FROM beneficiarios_ordenados bo
+      JOIN alumno a ON bo.id_alumno = a.id_alumno
+      LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+      LEFT JOIN curso c ON m.id_curso = c.id_curso
+      ORDER BY a.paterno ASC, a.nombres ASC, bo.fecha_registro DESC
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al obtener beneficiarios.' });
+  }
+});
+
+app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const idAlumno = parseInt(req.body?.id_alumno ?? req.body?.idAlumno, 10);
+  const activo = toBooleanOrNull(req.body?.activo);
+  const fechaInicio = normalizeDateInput(req.body?.fecha_inicio ?? req.body?.fechaInicio);
+  const fechaFin = normalizeDateInput(req.body?.fecha_fin ?? req.body?.fechaFin);
+  const motivoIngreso = toNullable(req.body?.motivo_ingreso ?? req.body?.motivoIngreso);
+
+  if (!Number.isInteger(idAlumno) || idAlumno <= 0 || activo === null) {
+    return res.status(400).json({ message: 'Faltan datos obligatorios para beneficiarios.' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const alumnoRes = await client.query('SELECT id_alumno FROM alumno WHERE id_alumno = $1 LIMIT 1', [idAlumno]);
+    if (alumnoRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Alumno no encontrado.' });
+    }
+
+    const result = await upsertBeneficiaryRecord(client, idAlumno, {
+      activo,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+      motivo_ingreso: motivoIngreso
+    });
+
+    await client.query('COMMIT');
+    res.json({ message: 'Beneficiario guardado correctamente.', beneficiario: result.row, action: result.action });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al guardar beneficiario.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const monthInfo = parseBeneficiaryImportMonth(req.body?.month);
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const defaultActivoValue = toBooleanOrNull(req.body?.defaultActivo);
+  const defaultActivo = defaultActivoValue === null ? true : defaultActivoValue;
+
+  console.log(`[beneficiarios/import] Inicio importacion mes=${req.body?.month || 'N/D'} filas=${rows.length}`);
+
+  if (!monthInfo) {
+    return res.status(400).json({ message: 'Debes indicar un mes válido con formato AAAA-MM.' });
+  }
+
+  if (!rows.length) {
+    return res.status(400).json({ message: 'No se recibieron filas para importar.' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const summary = {
+      total: rows.length,
+      beneficiarios_insertados: 0,
+      beneficiarios_actualizados: 0,
+      beneficiarios_sin_cambios: 0,
+      colaciones_insertadas: 0,
+      colaciones_omitidas: 0,
+      warnings: [],
+      errors: []
+    };
+
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index] || {};
+      const excelRowNumber = row.sourceRow || index + 2;
+
+      try {
+        const alumno = await resolveBeneficiaryStudent(client, row);
+        if (!alumno) {
+          console.error(
+            `[beneficiarios/import] Fila ${excelRowNumber}: no se pudo identificar alumno`,
+            {
+              id_alumno: row.id_alumno || row.idAlumno || row.alumno_id || null,
+              rut: row.rut || null,
+              nombre: row.nombre || row.nombres || null,
+              apellidos: row.apellidos || row.paterno || null,
+              curso: row.curso || row.grade || null,
+              email: row.email || row.correo || null
+            }
+          );
+          summary.errors.push({ row: excelRowNumber, message: 'No se pudo identificar al alumno en la base de datos.' });
+          continue;
+        }
+
+        const rowActive = toBooleanOrNull(row.activo);
+        const activo = rowActive === null ? defaultActivo : rowActive;
+        const beneficiaryResult = await upsertBeneficiaryRecord(client, alumno.id_alumno, {
+          activo,
+          fecha_inicio: normalizeDateInput(row.fecha_inicio ?? row.fechaInicio) || monthInfo.firstDay,
+          fecha_fin: normalizeDateInput(row.fecha_fin ?? row.fechaFin),
+          motivo_ingreso: toNullable(row.motivo_ingreso ?? row.motivoIngreso)
+        });
+
+        if (beneficiaryResult.action === 'inserted') summary.beneficiarios_insertados++;
+        else if (beneficiaryResult.action === 'updated') summary.beneficiarios_actualizados++;
+        else summary.beneficiarios_sin_cambios++;
+
+        const mealMarks = [];
+        const normalizedMeals = Array.isArray(row.meals) ? row.meals : [];
+
+        for (const meal of normalizedMeals) {
+          const day = parseInt(meal.day, 10);
+          if (!Number.isInteger(day) || day < 1 || day > monthInfo.daysInMonth) continue;
+
+          const date = `${monthInfo.monthKey}-${String(day).padStart(2, '0')}`;
+
+          // Nuevo formato: cada marca ya llega normalizada como un registro con tipo_alimentacion.
+          const mealType = sanitizeText(meal.tipo_alimentacion).toLowerCase();
+          if (mealType === 'desayuno' || mealType === 'almuerzo') {
+            mealMarks.push({ date, tipo_alimentacion: mealType });
+            continue;
+          }
+
+          // Compatibilidad con formato anterior (columnas desayuno/almuerzo booleanas).
+          if (isTruthyExcelMark(meal.desayuno)) mealMarks.push({ date, tipo_alimentacion: 'desayuno' });
+          if (isTruthyExcelMark(meal.almuerzo)) mealMarks.push({ date, tipo_alimentacion: 'almuerzo' });
+        }
+
+        if (mealMarks.length > 0) {
+          if (!activo) {
+            console.warn(`[beneficiarios/import] Fila ${excelRowNumber}: beneficiario inactivo, se omiten colaciones retroactivas`);
+            summary.warnings.push({ row: excelRowNumber, message: 'El beneficiario quedó inactivo y no se generaron colaciones retroactivas.' });
+          } else {
+            const mealResult = await importLunchRegistrationsFromBeneficiaries(client, alumno.id_alumno, monthInfo, mealMarks);
+            summary.colaciones_insertadas += mealResult.inserted;
+            summary.colaciones_omitidas += mealResult.skipped;
+          }
+        }
+      } catch (rowError) {
+        console.error(`[beneficiarios/import] Fila ${excelRowNumber}: error inesperado`, rowError);
+        summary.errors.push({ row: excelRowNumber, message: rowError.message });
+      }
+    }
+
+    await client.query('COMMIT');
+    console.log('[beneficiarios/import] Resumen', {
+      total: summary.total,
+      insertados: summary.beneficiarios_insertados,
+      actualizados: summary.beneficiarios_actualizados,
+      sinCambios: summary.beneficiarios_sin_cambios,
+      colacionesInsertadas: summary.colaciones_insertadas,
+      colacionesOmitidas: summary.colaciones_omitidas,
+      warnings: summary.warnings.length,
+      errors: summary.errors.length
+    });
+    res.json(summary);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[beneficiarios/import] Error fatal', err);
+    res.status(500).json({ message: 'Error al importar beneficiarios.' });
+  } finally {
+    client.release();
   }
 });
 

@@ -225,6 +225,9 @@ const AdminDashboard = () => {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => navigate('/admin/beneficiarios')} className="action-btn" style={{ backgroundColor: 'rgba(5, 150, 105, 0.1)', border: '1px solid rgba(5, 150, 105, 0.2)', color: '#059669' }}>
+              Beneficiarios
+            </button>
             <button onClick={() => navigate('/admin')} className="action-btn" style={{ backgroundColor: 'rgba(79, 70, 229, 0.1)', border: '1px solid rgba(79, 70, 229, 0.2)', color: 'var(--primary)' }}>
               Volver al Hub
             </button>

@@ -1708,6 +1708,120 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), 
   }
 });
 
+// === IMPORTAR BENEFICIARIOS PAE (sin generar asistencias retroactivas) ===
+app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const monthInfo = parseBeneficiaryImportMonth(req.body?.month);
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+
+  console.log(`[beneficiarios/import-pae] Inicio importacion mes=${req.body?.month || 'N/D'} filas=${rows.length}`);
+
+  if (!monthInfo) {
+    return res.status(400).json({ message: 'Debes indicar un mes válido con formato AAAA-MM.' });
+  }
+
+  if (!rows.length) {
+    return res.status(400).json({ message: 'No se recibieron filas para importar.' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const summary = {
+      total: rows.length,
+      beneficiarios_insertados: 0,
+      beneficiarios_actualizados: 0,
+      beneficiarios_sin_cambios: 0,
+      warnings: [],
+      errors: []
+    };
+
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index] || {};
+      const excelRowNumber = row.sourceRow || index + 2;
+      const rowSavepoint = `benef_pae_row_${index}`;
+      await client.query(`SAVEPOINT ${rowSavepoint}`);
+
+      try {
+        // Parsear fila PAE: Nº DE RUN, APELLIDOS, NOMBRE, CURSO, %RSH
+        const rutValue = toNullable(row.run || row['Nº DE RUN'] || row.rut);
+        const dvValue = toNullable(row.dv || row['dv'] || row['DV']);
+        const apellidosValue = toNullable(row.apellidos || row.APELLIDOS || row.paterno);
+        const nombreValue = toNullable(row.nombre || row.NOMBRE || row.nombres);
+        const porcentajeValue = toNullable(row.porcentaje || row['%RSH'] || row.porciento);
+
+        if (!rutValue) {
+          summary.errors.push({ row: excelRowNumber, message: 'RUT vacío.' });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+          continue;
+        }
+
+        const { rut, dv } = normalizeRutAndDv(rutValue, dvValue);
+        if (!rut) {
+          summary.errors.push({ row: excelRowNumber, message: 'RUT inválido.' });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+          continue;
+        }
+
+        // Buscar alumno por RUT
+        const studentRes = await client.query(
+          'SELECT id_alumno, nombres, paterno, materno FROM alumno WHERE rut = $1 LIMIT 1',
+          [rut]
+        );
+
+        if (studentRes.rows.length === 0) {
+          // Alumno no existe - NO crear beneficiario, solo warning
+          summary.warnings.push({ 
+            row: excelRowNumber, 
+            message: `Alumno con RUT ${rut} no existe en BD. Se omite importación como beneficiario.` 
+          });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+          continue;
+        }
+
+        const idAlumno = studentRes.rows[0].id_alumno;
+
+        // Crear/actualizar beneficiario_alimentacion (SIN lunch_registrations)
+        const beneficiaryResult = await upsertBeneficiaryRecord(client, idAlumno, {
+          activo: true,
+          fecha_inicio: monthInfo.firstDay,
+          fecha_fin: monthInfo.lastDay,
+          motivo_ingreso: porcentajeValue ? `PAE ${porcentajeValue}` : 'PAE'
+        });
+
+        if (beneficiaryResult.action === 'inserted') summary.beneficiarios_insertados++;
+        else if (beneficiaryResult.action === 'updated') summary.beneficiarios_actualizados++;
+        else summary.beneficiarios_sin_cambios++;
+
+        await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+      } catch (rowError) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${rowSavepoint}`);
+        await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+        console.error(`[beneficiarios/import-pae] Fila ${excelRowNumber}: error`, rowError);
+        summary.errors.push({ row: excelRowNumber, message: rowError.message });
+      }
+    }
+
+    await client.query('COMMIT');
+    console.log('[beneficiarios/import-pae] Resumen', {
+      total: summary.total,
+      insertados: summary.beneficiarios_insertados,
+      actualizados: summary.beneficiarios_actualizados,
+      sinCambios: summary.beneficiarios_sin_cambios,
+      warnings: summary.warnings.length,
+      errors: summary.errors.length
+    });
+    res.json(summary);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[beneficiarios/import-pae] Error fatal', err);
+    res.status(500).json({ message: 'Error al importar beneficiarios PAE.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (req, res) => {
   const rows = Array.isArray(req.body?.students) ? req.body.students : [];
 

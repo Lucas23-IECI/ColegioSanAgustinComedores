@@ -55,6 +55,129 @@ const getStudentLabel = (student) => {
   return parts.join(' - ');
 };
 
+// Parsear Excel formato PAE (sin columnas de desayuno/almuerzo)
+const parsePAEExcel = async (file) => {
+  const XLSX = await import('xlsx');
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: 'array' });
+  const firstSheetName = workbook.SheetNames[0];
+
+  if (!firstSheetName) {
+    throw new Error('El archivo no contiene hojas válidas.');
+  }
+
+  const sheet = workbook.Sheets[firstSheetName];
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  if (!rawRows.length) {
+    throw new Error('No se detectaron datos en la hoja.');
+  }
+
+  // Normalizar RUT: "24447036-K" → { run: "24447036", dv: "K" }
+  const normalizeRUT = (rutString) => {
+    const str = sanitizeText(rutString);
+    if (!str) return { run: '', dv: '' };
+
+    const parts = str.split('-');
+    if (parts.length === 2) {
+      return { run: parts[0].replace(/[^\d]/g, ''), dv: parts[1].trim().toUpperCase() };
+    }
+
+    // Sin guion: preservar RUN numerico puro y separar DV solo si aplica.
+    const trimmed = str.replace(/[^0-9a-kA-K]/g, '').toUpperCase();
+    if (!trimmed) return { run: '', dv: '' };
+    if (/^\d+$/.test(trimmed)) {
+      if (trimmed.length <= 8) return { run: trimmed, dv: '' };
+      return { run: trimmed.slice(0, -1), dv: trimmed.slice(-1) };
+    }
+    if (trimmed.length < 2) return { run: trimmed.replace(/[^\d]/g, ''), dv: '' };
+
+    return {
+      run: trimmed.slice(0, -1).replace(/[^\d]/g, ''),
+      dv: trimmed.slice(-1)
+    };
+  };
+
+  const hasAny = (value, tokens) => tokens.some((token) => value.includes(token));
+
+  // Detectar fila de encabezado real (soporta titulos en la fila 1)
+  const headerIndex = rawRows.findIndex((row) => {
+    const keys = (row || []).map((cell) => normalizeHeaderKey(cell));
+    const hasRun = keys.some((k) => hasAny(k, ['run', 'rut', 'nderun', 'nrun']));
+    const hasNombre = keys.some((k) => hasAny(k, ['nombre', 'nombres']));
+    const hasApellido = keys.some((k) => hasAny(k, ['apellido', 'apellidos']));
+    return hasRun && (hasNombre || hasApellido);
+  });
+
+  if (headerIndex === -1) {
+    throw new Error('No se encontró la fila de encabezados del Excel PAE.');
+  }
+
+  const headerRow = rawRows[headerIndex] || [];
+  const dataRows = rawRows.slice(headerIndex + 1);
+
+  const getValueByTokens = (row, tokens) => {
+    for (let col = 0; col < headerRow.length; col++) {
+      const key = normalizeHeaderKey(headerRow[col]);
+      if (!key) continue;
+      if (!tokens.some((token) => key.includes(token))) continue;
+      const value = sanitizeText(row[col]);
+      if (value) return value;
+    }
+    return '';
+  };
+
+  const importRows = [];
+  const previewRows = [];
+
+  dataRows.forEach((row, dataIndex) => {
+    if (!(row || []).some((cell) => sanitizeText(cell) !== '')) return;
+
+    const runRaw = getValueByTokens(row, ['run', 'rut', 'nderun', 'nrun']);
+    const dvRaw = getValueByTokens(row, ['dv', 'digitoverificador', 'digito']);
+    const apellidos = getValueByTokens(row, ['apellido', 'apellidos']);
+    const nombre = getValueByTokens(row, ['nombre', 'nombres']);
+    const curso = getValueByTokens(row, ['curso']);
+    const porcentaje = getValueByTokens(row, ['rsh', 'porcent']);
+    const email = getValueByTokens(row, ['email', 'correo', 'mail']);
+
+    const separated = normalizeRUT(runRaw);
+    const run = separated.run;
+    const dv = sanitizeText(dvRaw || separated.dv).toUpperCase();
+
+    // Solo requerir RUN válido - los demás campos son opcionales
+    if (!run) return;
+
+    const sourceRow = headerIndex + 2 + dataIndex;
+    const parsedRow = {
+      sourceRow,
+      run,
+      dv: dv || null,
+      apellidos,
+      nombre,
+      curso,
+      porcentaje,
+      email
+    };
+
+    importRows.push(parsedRow);
+    previewRows.push({
+      sourceRow,
+      run: `${run}-${dv || '?'}`,
+      apellidos: apellidos || '—',
+      nombre: nombre || '—',
+      curso: curso || '—',
+      porcentaje: porcentaje || 'S/I'
+    });
+  });
+
+  if (importRows.length === 0) {
+    throw new Error('No se encontraron filas válidas con RUT.');
+  }
+
+  return { rows: importRows, previewRows, sheetName: firstSheetName };
+};
+
 const parseBeneficiaryExcel = async (file, month) => {
   const XLSX = await import('xlsx');
   const data = await file.arrayBuffer();
@@ -177,11 +300,20 @@ const BeneficiariosAdmin = () => {
   const [importResult, setImportResult] = useState(null);
   const [importError, setImportError] = useState('');
 
+  // Estados para importación PAE
+  const [paeFileName, setPaeFileName] = useState('');
+  const [paeRows, setPaeRows] = useState([]);
+  const [paePreview, setPaePreview] = useState([]);
+  const [paeImporting, setPaeImporting] = useState(false);
+  const [paeImportResult, setPaeImportResult] = useState(null);
+  const [paeImportError, setPaeImportError] = useState('');
+
   const navigate = useNavigate();
 
   useEffect(() => {
     const now = new Date();
-    setExcelMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    setExcelMonth(currentMonth);
     fetchData();
   }, []);
 
@@ -334,6 +466,75 @@ const BeneficiariosAdmin = () => {
     }
   };
 
+  const handlePAEUpload = async (event) => {
+    const file = event.target.files?.[0];
+    setPaeImportError('');
+    setPaeImportResult(null);
+    setPaeRows([]);
+    setPaePreview([]);
+    setPaeFileName('');
+
+    if (!file) return;
+
+    try {
+      const parsed = await parsePAEExcel(file);
+      setPaeRows(parsed.rows);
+      setPaePreview(parsed.previewRows);
+      setPaeFileName(file.name);
+      if (parsed.rows.length === 0) {
+        setPaeImportError('El archivo no contiene filas válidas para importar.');
+      }
+    } catch (err) {
+      console.error(err);
+      setPaeImportError(err.message || 'No fue posible leer el archivo Excel.');
+    }
+  };
+
+  const importPAE = async () => {
+    if (!paeRows.length || paeImporting) return;
+
+    setPaeImporting(true);
+    setPaeImportError('');
+    setPaeImportResult(null);
+
+    // Usar mes actual automáticamente
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    try {
+      const res = await axios.post(
+        `${API_URL}/admin/beneficiarios/import-pae`,
+        {
+          month: currentMonth,
+          rows: paeRows
+        },
+        { withCredentials: true }
+      );
+
+      const errors = Array.isArray(res.data?.errors) ? res.data.errors : [];
+      const warnings = Array.isArray(res.data?.warnings) ? res.data.warnings : [];
+      console.log('[beneficiarios/import-pae] Respuesta importacion', res.data);
+      if (warnings.length > 0) {
+        console.warn('[beneficiarios/import-pae] Warnings', warnings);
+      }
+      if (errors.length > 0) {
+        console.error('[beneficiarios/import-pae] Errores', errors);
+      }
+
+      setPaeImportResult(res.data);
+      setMessage('Importación PAE completada correctamente (sin asistencias retroactivas).');
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+      const backendMessage = err.response?.data?.message;
+      const statusCode = err.response?.status;
+      const fallback = err.message || 'No se pudo importar el Excel PAE.';
+      setPaeImportError(backendMessage || (statusCode ? `Error ${statusCode}: ${fallback}` : fallback));
+    } finally {
+      setPaeImporting(false);
+    }
+  };
+
   const filteredBeneficiarios = beneficiarios.filter((item) => {
     const hayTermino = `${item.rut || ''} ${item.nombres || ''} ${item.paterno || ''} ${item.materno || ''} ${item.nombre_curso || ''}`.toLowerCase();
     return hayTermino.includes(searchTerm.toLowerCase());
@@ -368,7 +569,10 @@ const BeneficiariosAdmin = () => {
             <Plus size={16} /> Agregar / editar
           </button>
           <button className={`students-tab ${activeTab === 'carga' ? 'active' : ''}`} onClick={() => setActiveTab('carga')}>
-            <FileSpreadsheet size={16} /> Carga Excel
+            <FileSpreadsheet size={16} /> Carga asistencia
+          </button>
+          <button className={`students-tab ${activeTab === 'pae' ? 'active' : ''}`} onClick={() => setActiveTab('pae')}>
+            <FileSpreadsheet size={16} /> Carga PAE
           </button>
         </div>
 
@@ -550,10 +754,10 @@ const BeneficiariosAdmin = () => {
           <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
             <div style={{ background: 'white', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '16px', padding: '18px' }}>
               <h3 style={{ marginTop: 0, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Upload size={18} /> Carga de Excel de beneficiarios
+                <Upload size={18} /> Carga de asistencias (con colaciones retroactivas)
               </h3>
               <p style={{ color: 'var(--text-light)', marginBottom: '16px', lineHeight: 1.5 }}>
-                Primero elige el mes correspondiente. Luego sube el archivo con la grilla diaria, donde cada día tiene dos columnas: <strong>D</strong> para desayuno y <strong>A</strong> para almuerzo.
+                Elige el mes e importa un Excel con desayuno/almuerzo por día. Se crea/actualiza beneficiarios <strong>Y</strong> se generan registros retroactivos de asistencia a colación (lunch_registrations).
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', alignItems: 'end' }}>
@@ -634,6 +838,91 @@ const BeneficiariosAdmin = () => {
                 {excelPreview.length > 20 && (
                   <p style={{ padding: '12px 16px', color: 'var(--text-light)', fontSize: '0.85rem' }}>
                     Mostrando 20 de {excelPreview.length} filas.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'pae' && (
+          <div className="fade-in">
+            <div style={{ background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.15)', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-light)', marginBottom: '12px', fontStyle: 'italic' }}>
+                ℹ️ Solo importa alumnos que ya existen en la base de datos. Los RUT no encontrados se omiten con advertencia.
+              </div>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <label style={{ flex: '1', minWidth: '200px', cursor: 'pointer', background: 'rgba(59, 130, 246, 0.1)', border: '1px dashed rgba(59, 130, 246, 0.3)', borderRadius: '6px', padding: '12px', textAlign: 'center', transition: 'all 0.2s' }}>
+                  <Upload size={18} style={{ marginBottom: '4px' }} />
+                  <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Cargar Excel PAE (RUT, Apellidos, Nombre, Curso, %RSH)</div>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handlePAEUpload}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                <button
+                  className="action-btn"
+                  onClick={importPAE}
+                  disabled={paeRows.length === 0 || paeImporting}
+                  style={{ background: paeRows.length === 0 || paeImporting ? 'var(--gray-light)' : 'rgba(5, 150, 105, 0.1)', color: paeRows.length === 0 || paeImporting ? 'var(--gray-dark)' : '#059669' }}
+                >
+                  {paeImporting ? 'Importando...' : 'Importar PAE'}
+                </button>
+              </div>
+              {paeFileName && (
+                <div style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-light)' }}>
+                  Archivo: {paeFileName} ({paeRows.length} filas)
+                </div>
+              )}
+            </div>
+
+            {paeImportError && <div className="alert error" style={{ marginBottom: '16px' }}>{paeImportError}</div>}
+
+            {paeImportResult && (
+              <div style={{ background: 'rgba(5, 150, 105, 0.05)', border: '1px solid rgba(5, 150, 105, 0.2)', borderRadius: '6px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
+                <div style={{ fontWeight: 600, color: '#059669', marginBottom: '6px' }}>Resultado de importación PAE:</div>
+                <div>
+                  Total: {paeImportResult.total} | Insertados: {paeImportResult.beneficiarios_insertados} | Actualizados: {paeImportResult.beneficiarios_actualizados} | Sin cambios: {paeImportResult.beneficiarios_sin_cambios} | Errores: {paeImportResult.errors?.length || 0}
+                </div>
+                {paeImportResult.warnings && paeImportResult.warnings.length > 0 && (
+                  <div style={{ marginTop: '8px', color: 'var(--text-light)' }}>
+                    Advertencias: {paeImportResult.warnings.length}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {paePreview.length > 0 && (
+              <div className="students-table-wrap">
+                <table className="students-table">
+                  <thead>
+                    <tr>
+                      <th>Fila</th>
+                      <th>RUT</th>
+                      <th>Apellidos</th>
+                      <th>Nombre</th>
+                      <th>Curso</th>
+                      <th>Beneficio %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paePreview.slice(0, 25).map((row) => (
+                      <tr key={`${row.sourceRow}-${row.run}`}>
+                        <td>{row.sourceRow}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{row.run}</td>
+                        <td>{row.apellidos || '—'}</td>
+                        <td>{row.nombre || '—'}</td>
+                        <td>{row.curso || '—'}</td>
+                        <td>{row.porcentaje}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {paePreview.length > 25 && (
+                  <p style={{ padding: '12px 16px', color: 'var(--text-light)', fontSize: '0.85rem' }}>
+                    Mostrando 25 de {paePreview.length} filas.
                   </p>
                 )}
               </div>

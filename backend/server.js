@@ -70,7 +70,7 @@ const ensureExcelDerivedTables = async () => {
       id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
       lista VARCHAR(50),
       estado VARCHAR(50),
-      foto VARCHAR(20),
+      foto VARCHAR(255),
       condicionalidad VARCHAR(100),
       nacionalidad VARCHAR(100),
       religion VARCHAR(100),
@@ -94,7 +94,7 @@ const ensureExcelDerivedTables = async () => {
       fecha_nacimiento DATE,
       comuna VARCHAR(100),
       empresa VARCHAR(150),
-      telefono_empresa VARCHAR(20),
+      telefono_empresa VARCHAR(50),
       estudios VARCHAR(150),
       profesion VARCHAR(150),
       nacionalidad VARCHAR(100),
@@ -115,8 +115,8 @@ const ensureExcelDerivedTables = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS salud_detalle (
       id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
-      peso VARCHAR(20),
-      talla VARCHAR(20),
+      peso VARCHAR(50),
+      talla VARCHAR(50),
       grupo_sangre VARCHAR(10),
       problemas_visuales BOOLEAN,
       problemas_auditivos BOOLEAN,
@@ -150,6 +150,16 @@ const ensureExcelDerivedTables = async () => {
 
   await pool.query(`ALTER TABLE beneficiario_alimentacion ALTER COLUMN id_alumno SET NOT NULL`);
   await pool.query(`ALTER TABLE beneficiario_alimentacion ALTER COLUMN activo SET NOT NULL`);
+
+  // Compatibilidad hacia adelante: evita fallos por textos largos al importar desde Excel.
+  await pool.query(`ALTER TABLE alumno ALTER COLUMN sexo TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE alumno ALTER COLUMN telefono TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE persona_contacto ALTER COLUMN telefono TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE persona_contacto_detalle ALTER COLUMN telefono_empresa TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE alumno_complemento ALTER COLUMN foto TYPE VARCHAR(255)`);
+  await pool.query(`ALTER TABLE salud_detalle ALTER COLUMN peso TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE salud_detalle ALTER COLUMN talla TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE emergencia ALTER COLUMN telefono_emergencia TYPE VARCHAR(50)`);
 };
 
 const sanitizeText = (value) => {
@@ -262,6 +272,12 @@ const normalizeKeyword = (value) => {
 const toNullable = (value) => {
   const cleaned = sanitizeText(value);
   return cleaned ? cleaned : null;
+};
+
+const hasIncomingValue = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
 };
 
 const parseBenefitActive = (value) => {
@@ -379,6 +395,7 @@ const upsertSimpleByAlumno = async (client, tableName, idFieldName, idAlumno, pa
 
   const changedKeys = keys.filter((key) => {
     const nextVal = payload[key] ?? null;
+    if (!hasIncomingValue(nextVal)) return false;
     const currVal = existing[key] ?? null;
     return valuesAreDifferent(currVal, nextVal);
   });
@@ -417,6 +434,7 @@ const upsertSimpleByOwner = async (client, tableName, ownerFieldName, ownerId, p
 
   const changedKeys = keys.filter((key) => {
     const nextVal = payload[key] ?? null;
+    if (!hasIncomingValue(nextVal)) return false;
     const currVal = existing[key] ?? null;
     return valuesAreDifferent(currVal, nextVal);
   });
@@ -1588,6 +1606,8 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), 
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index] || {};
       const excelRowNumber = row.sourceRow || index + 2;
+      const rowSavepoint = `benef_import_row_${index}`;
+      await client.query(`SAVEPOINT ${rowSavepoint}`);
 
       try {
         const alumno = await resolveBeneficiaryStudent(client, row);
@@ -1604,6 +1624,7 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), 
             }
           );
           summary.errors.push({ row: excelRowNumber, message: 'No se pudo identificar al alumno en la base de datos.' });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
           continue;
         }
 
@@ -1651,7 +1672,11 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), 
             summary.colaciones_omitidas += mealResult.skipped;
           }
         }
+
+        await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
       } catch (rowError) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${rowSavepoint}`);
+        await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
         console.error(`[beneficiarios/import] Fila ${excelRowNumber}: error inesperado`, rowError);
         summary.errors.push({ row: excelRowNumber, message: rowError.message });
       }
@@ -1701,17 +1726,21 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
 
     for (let index = 0; index < rows.length; index++) {
       const excelRowNumber = index + 2;
+      const rowSavepoint = `students_sync_row_${index}`;
+      await client.query(`SAVEPOINT ${rowSavepoint}`);
 
       try {
         const normalized = parseStudentRow(rows[index]);
 
         if (!normalized.rut) {
           summary.errors.push({ row: excelRowNumber, message: 'RUT vacío o inválido.' });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
           continue;
         }
 
         if (!normalized.nombres || !normalized.paterno) {
           summary.errors.push({ row: excelRowNumber, message: 'Faltan nombres o apellido paterno.' });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
           continue;
         }
 
@@ -1727,12 +1756,14 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
 
           if (dbStamp && dbStamp === normalized.fechaActualizacion) {
             summary.unchanged++;
+            await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
             continue;
           }
 
           if (dbStamp && dbStamp > normalized.fechaActualizacion) {
             summary.warnings.push(`Fila ${excelRowNumber}: Fecha_actualizacion en BD es mayor que Excel; se omite por seguridad.`);
             summary.unchanged++;
+            await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
             continue;
           }
         }
@@ -1821,23 +1852,40 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
         } else {
           idAlumno = existing.id_alumno;
           const incomingActivo = normalized.activo === null ? existing.activo : normalized.activo;
+          const nextStudentPayload = {
+            matricula: hasIncomingValue(normalized.matricula) ? normalized.matricula : existing.matricula || null,
+            dv: hasIncomingValue(normalized.dv) ? normalized.dv : existing.dv || null,
+            nombres: hasIncomingValue(normalized.nombres) ? normalized.nombres : existing.nombres,
+            paterno: hasIncomingValue(normalized.paterno) ? normalized.paterno : existing.paterno,
+            materno: hasIncomingValue(normalized.materno) ? normalized.materno : (existing.materno || null),
+            fecha_nacimiento: hasIncomingValue(normalized.fechaNacimiento) ? normalized.fechaNacimiento : (existing.fecha_nacimiento ? existing.fecha_nacimiento.toISOString().slice(0, 10) : null),
+            sexo: hasIncomingValue(normalized.sexo) ? normalized.sexo : (existing.sexo || null),
+            email: hasIncomingValue(normalized.email) ? normalized.email : (existing.email || null),
+            telefono: hasIncomingValue(normalized.telefono) ? normalized.telefono : (existing.telefono || null),
+            direccion: hasIncomingValue(normalized.direccion) ? normalized.direccion : (existing.direccion || null),
+            codigo_barra: hasIncomingValue(normalized.codigoBarra) ? normalized.codigoBarra : (existing.codigo_barra || null),
+            activo: incomingActivo,
+            fecha_actualizacion: normalized.fechaActualizacion !== null
+              ? normalized.fechaActualizacion
+              : (existing.fecha_actualizacion ? new Date(existing.fecha_actualizacion).toISOString() : null)
+          };
 
           const hasStudentChanges =
-            (existing.matricula || '') !== (normalized.matricula || '') ||
-            existing.nombres !== normalized.nombres ||
-            existing.paterno !== normalized.paterno ||
-            (existing.materno || '') !== (normalized.materno || '') ||
-            (existing.email || '') !== (normalized.email || '') ||
-            (existing.telefono || '') !== (normalized.telefono || '') ||
-            (existing.direccion || '') !== (normalized.direccion || '') ||
-            (existing.sexo || '') !== (normalized.sexo || '') ||
-            (existing.fecha_nacimiento ? existing.fecha_nacimiento.toISOString().slice(0, 10) : null) !== normalized.fechaNacimiento ||
+            (existing.matricula || '') !== (nextStudentPayload.matricula || '') ||
+            existing.nombres !== nextStudentPayload.nombres ||
+            existing.paterno !== nextStudentPayload.paterno ||
+            (existing.materno || '') !== (nextStudentPayload.materno || '') ||
+            (existing.email || '') !== (nextStudentPayload.email || '') ||
+            (existing.telefono || '') !== (nextStudentPayload.telefono || '') ||
+            (existing.direccion || '') !== (nextStudentPayload.direccion || '') ||
+            (existing.sexo || '') !== (nextStudentPayload.sexo || '') ||
+            (existing.fecha_nacimiento ? existing.fecha_nacimiento.toISOString().slice(0, 10) : null) !== nextStudentPayload.fecha_nacimiento ||
             (normalized.fechaActualizacion !== null && (existing.fecha_actualizacion ? new Date(existing.fecha_actualizacion).toISOString() : null) !== normalized.fechaActualizacion) ||
-            (existing.dv || '') !== (normalized.dv || '') ||
-            (existing.codigo_barra || '') !== (normalized.codigoBarra || '') ||
+            (existing.dv || '') !== (nextStudentPayload.dv || '') ||
+            (existing.codigo_barra || '') !== (nextStudentPayload.codigo_barra || '') ||
             existing.activo !== incomingActivo;
 
-          const nextFechaActualizacion = normalized.fechaActualizacion || (existing.fecha_actualizacion ? new Date(existing.fecha_actualizacion).toISOString() : null);
+          const nextFechaActualizacion = nextStudentPayload.fecha_actualizacion;
 
           if (hasStudentChanges) {
             await client.query(
@@ -1859,17 +1907,17 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
                 WHERE id_alumno = $14
               `,
               [
-                normalized.matricula || null,
-                normalized.dv || null,
-                normalized.nombres,
-                normalized.paterno,
-                normalized.materno || null,
-                normalized.fechaNacimiento,
-                normalized.sexo || null,
-                normalized.email || null,
-                normalized.telefono || null,
-                normalized.direccion || null,
-                normalized.codigoBarra || null,
+                nextStudentPayload.matricula,
+                nextStudentPayload.dv,
+                nextStudentPayload.nombres,
+                nextStudentPayload.paterno,
+                nextStudentPayload.materno,
+                nextStudentPayload.fecha_nacimiento,
+                nextStudentPayload.sexo,
+                nextStudentPayload.email,
+                nextStudentPayload.telefono,
+                nextStudentPayload.direccion,
+                nextStudentPayload.codigo_barra,
                 incomingActivo,
                 nextFechaActualizacion,
                 idAlumno
@@ -2127,7 +2175,11 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
         } else {
           summary.unchanged++;
         }
+
+        await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
       } catch (rowError) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${rowSavepoint}`);
+        await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
         summary.errors.push({ row: excelRowNumber, message: rowError.message });
       }
     }

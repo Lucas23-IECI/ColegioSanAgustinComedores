@@ -42,9 +42,9 @@ CREATE TABLE alumno (
   paterno VARCHAR(100) NOT NULL,
   materno VARCHAR(100),
   fecha_nacimiento DATE,
-  sexo VARCHAR(20),
+  sexo VARCHAR(50),
   email VARCHAR(150),
-  telefono VARCHAR(20),
+  telefono VARCHAR(50),
   direccion VARCHAR(255),
   fecha_actualizacion TIMESTAMP,
   codigo_barra VARCHAR(100) UNIQUE, -- NUEVO: Campo único para lector de tarjetas
@@ -55,7 +55,7 @@ CREATE TABLE alumno_complemento (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   lista VARCHAR(50),
   estado VARCHAR(50),
-  foto VARCHAR(20),
+  foto VARCHAR(255),
   condicionalidad VARCHAR(100),
   nacionalidad VARCHAR(100),
   religion VARCHAR(100),
@@ -79,7 +79,7 @@ CREATE TABLE persona_contacto (
   nombres VARCHAR(100) NOT NULL,
   paterno VARCHAR(100) NOT NULL,
   materno VARCHAR(100),
-  telefono VARCHAR(20),
+  telefono VARCHAR(50),
   email VARCHAR(150),
   direccion VARCHAR(255)
 );
@@ -89,7 +89,7 @@ CREATE TABLE persona_contacto_detalle (
   fecha_nacimiento DATE,
   comuna VARCHAR(100),
   empresa VARCHAR(150),
-  telefono_empresa VARCHAR(20),
+  telefono_empresa VARCHAR(50),
   estudios VARCHAR(150),
   profesion VARCHAR(150),
   nacionalidad VARCHAR(100),
@@ -154,8 +154,8 @@ CREATE TABLE salud (
 
 CREATE TABLE salud_detalle (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
-  peso VARCHAR(20),
-  talla VARCHAR(20),
+  peso VARCHAR(50),
+  talla VARCHAR(50),
   grupo_sangre VARCHAR(10),
   problemas_visuales BOOLEAN,
   problemas_auditivos BOOLEAN,
@@ -168,7 +168,7 @@ CREATE TABLE emergencia (
   id_emergencia SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   avisar_a VARCHAR(100),
-  telefono_emergencia VARCHAR(20),
+  telefono_emergencia VARCHAR(50),
   trasladar_a VARCHAR(150)
 );
 

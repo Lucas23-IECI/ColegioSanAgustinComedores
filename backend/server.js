@@ -281,6 +281,11 @@ const hasIncomingValue = (value) => {
 };
 
 const parseBenefitActive = (value) => {
+  const str = String(value).trim();
+  
+  // Si es solo números puros, ignorar (es número de lista del curso, no beneficiario)
+  if (/^\d+$/.test(str)) return null;
+  
   const boolValue = toBooleanOrNull(value);
   if (boolValue !== null) return boolValue;
 

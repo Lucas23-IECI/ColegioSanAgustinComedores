@@ -206,6 +206,24 @@ const normalizeRutAndDv = (rutInput, dvInput) => {
   };
 };
 
+const calculateRutDv = (rut) => {
+  const cleanedRut = sanitizeText(rut).replace(/\D/g, '');
+  if (!cleanedRut) return '';
+
+  let sum = 0;
+  let multiplier = 2;
+
+  for (let i = cleanedRut.length - 1; i >= 0; i--) {
+    sum += Number(cleanedRut[i]) * multiplier;
+    multiplier = multiplier === 7 ? 2 : multiplier + 1;
+  }
+
+  const remainder = 11 - (sum % 11);
+  if (remainder === 11) return '0';
+  if (remainder === 10) return 'K';
+  return String(remainder);
+};
+
 const toBooleanOrNull = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return value;
@@ -1510,6 +1528,7 @@ app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (r
         bo.motivo_ingreso,
         bo.fecha_registro,
         a.rut,
+        a.dv,
         a.nombres,
         a.paterno,
         a.materno,
@@ -1757,9 +1776,15 @@ app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin'
           continue;
         }
 
+        if (!/^\d{7,8}$/.test(rut)) {
+          summary.errors.push({ row: excelRowNumber, message: `RUN inválido: ${rut}. Debe contener 7 u 8 dígitos.` });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+          continue;
+        }
+
         // Buscar alumno por RUT
         const studentRes = await client.query(
-          'SELECT id_alumno, nombres, paterno, materno FROM alumno WHERE rut = $1 LIMIT 1',
+          'SELECT id_alumno, nombres, paterno, materno, dv FROM alumno WHERE rut = $1 LIMIT 1',
           [rut]
         );
 
@@ -1773,7 +1798,24 @@ app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin'
           continue;
         }
 
-        const idAlumno = studentRes.rows[0].id_alumno;
+        const studentRow = studentRes.rows[0];
+        const idAlumno = studentRow.id_alumno;
+
+        const expectedDv = calculateRutDv(rut);
+        if (dv && expectedDv && dv !== expectedDv) {
+          summary.warnings.push({
+            row: excelRowNumber,
+            message: `DV inconsistente para RUN ${rut}: recibido ${dv}, esperado ${expectedDv}. Se procesa por RUN.`
+          });
+        }
+
+        const studentDv = sanitizeText(studentRow.dv).toUpperCase();
+        if (dv && studentDv && dv !== studentDv) {
+          summary.warnings.push({
+            row: excelRowNumber,
+            message: `DV del archivo (${dv}) no coincide con DV en BD (${studentDv}) para RUN ${rut}. Se procesa por RUN.`
+          });
+        }
 
         // Crear/actualizar beneficiario_alimentacion (SIN lunch_registrations)
         const beneficiaryResult = await upsertBeneficiaryRecord(client, idAlumno, {

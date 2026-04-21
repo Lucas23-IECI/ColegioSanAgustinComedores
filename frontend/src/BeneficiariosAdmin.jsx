@@ -55,6 +55,13 @@ const getStudentLabel = (student) => {
   return parts.join(' - ');
 };
 
+const formatRutWithDv = (rut, dv) => {
+  const run = sanitizeText(rut);
+  const verifier = sanitizeText(dv).toUpperCase();
+  if (!run) return 'Sin RUT';
+  return verifier ? `${run}-${verifier}` : run;
+};
+
 // Parsear Excel formato PAE (sin columnas de desayuno/almuerzo)
 const parsePAEExcel = async (file) => {
   const XLSX = await import('xlsx');
@@ -532,7 +539,8 @@ const BeneficiariosAdmin = () => {
   };
 
   const filteredBeneficiarios = beneficiarios.filter((item) => {
-    const hayTermino = `${item.rut || ''} ${item.nombres || ''} ${item.paterno || ''} ${item.materno || ''} ${item.nombre_curso || ''}`.toLowerCase();
+    const rutCompleto = formatRutWithDv(item.rut, item.dv);
+    const hayTermino = `${rutCompleto} ${item.rut || ''} ${item.dv || ''} ${item.nombres || ''} ${item.paterno || ''} ${item.materno || ''} ${item.nombre_curso || ''}`.toLowerCase();
     return hayTermino.includes(searchTerm.toLowerCase());
   });
 
@@ -622,7 +630,7 @@ const BeneficiariosAdmin = () => {
                             {item.nombres} {item.paterno} {item.materno || ''}
                           </div>
                           <div style={{ fontSize: '0.82rem', color: 'var(--text-light)' }}>
-                            {item.rut || 'Sin RUT'}
+                            {formatRutWithDv(item.rut, item.dv)}
                           </div>
                         </td>
                         <td>{item.nombre_curso || 'S/C'}</td>

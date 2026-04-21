@@ -235,7 +235,16 @@ function Students() {
                 Selecciona la nómina de un curso para inspeccionar su universo de alumnos.
              </p>
              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px'}}>
-                
+                <div 
+                  className="registration-card"
+                  style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'rgba(59, 130, 246, 0.05)'}}
+                  onClick={() => setSelectedCourse('Toda La Matrícula')}
+                >
+                  <Users size={32} color="#3b82f6" style={{marginBottom: '10px'}}/>
+                  <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>Todos los Alumnos</h3>
+                  <p style={{color: 'var(--text-light)', margin: 0}}>Padrón Global ({students.length})</p>
+                </div>
+
                 {Object.keys(courseGroups).sort().map(curso => (
                    <div 
                      key={curso} 
@@ -248,16 +257,6 @@ function Students() {
                      <p style={{color: 'var(--text-light)', margin: 0}}>{courseGroups[curso].length} Alumnos</p>
                    </div>
                 ))}
-
-                <div 
-                  className="registration-card"
-                  style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'rgba(59, 130, 246, 0.05)'}}
-                  onClick={() => setSelectedCourse('Toda La Matrícula')}
-                >
-                  <Users size={32} color="#3b82f6" style={{marginBottom: '10px'}}/>
-                  <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>Todos los Alumnos</h3>
-                  <p style={{color: 'var(--text-light)', margin: 0}}>Padrón Global ({students.length})</p>
-                </div>
              </div>
           </div>
         ) : activeSection === 'listado' ? (

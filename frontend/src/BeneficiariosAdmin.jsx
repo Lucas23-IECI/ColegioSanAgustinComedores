@@ -252,7 +252,6 @@ const parseBeneficiaryExcel = async (file, month) => {
       email,
       activo: true,
       fecha_inicio: `${month}-01`,
-      fecha_fin: '',
       motivo_ingreso: '',
       meals: mealMarks
     };
@@ -276,7 +275,6 @@ const emptyForm = {
   id_alumno: '',
   activo: true,
   fecha_inicio: '',
-  fecha_fin: '',
   motivo_ingreso: ''
 };
 
@@ -346,7 +344,6 @@ const BeneficiariosAdmin = () => {
       id_alumno: String(item.id_alumno || ''),
       activo: Boolean(item.activo),
       fecha_inicio: formatDateInput(item.fecha_inicio),
-      fecha_fin: formatDateInput(item.fecha_fin),
       motivo_ingreso: item.motivo_ingreso || ''
     });
     setMessage('');
@@ -374,7 +371,6 @@ const BeneficiariosAdmin = () => {
           id_alumno: idAlumno,
           activo: Boolean(form.activo),
           fecha_inicio: form.fecha_inicio || null,
-          fecha_fin: form.fecha_fin || null,
           motivo_ingreso: form.motivo_ingreso || null
         },
         { withCredentials: true }
@@ -613,7 +609,7 @@ const BeneficiariosAdmin = () => {
                       <th>Alumno</th>
                       <th>Curso</th>
                       <th>Estado</th>
-                      <th>Vigencia</th>
+                      <th>Desde</th>
                       <th>Motivo</th>
                       <th style={{ textAlign: 'right' }}>Acciones</th>
                     </tr>
@@ -636,7 +632,7 @@ const BeneficiariosAdmin = () => {
                           </span>
                         </td>
                         <td style={{ fontSize: '0.84rem' }}>
-                          {formatDisplayDate(item.fecha_inicio)} - {formatDisplayDate(item.fecha_fin)}
+                          {formatDisplayDate(item.fecha_inicio)}
                         </td>
                         <td style={{ maxWidth: '240px' }}>{item.motivo_ingreso || '—'}</td>
                         <td style={{ textAlign: 'right' }}>
@@ -685,26 +681,15 @@ const BeneficiariosAdmin = () => {
                   </select>
                 </label>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
-                  <label style={{ display: 'grid', gap: '6px' }}>
-                    <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Fecha inicio</span>
-                    <input
-                      type="date"
-                      value={form.fecha_inicio}
-                      onChange={(e) => setForm((prev) => ({ ...prev, fecha_inicio: e.target.value }))}
-                      style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
-                    />
-                  </label>
-                  <label style={{ display: 'grid', gap: '6px' }}>
-                    <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Fecha fin</span>
-                    <input
-                      type="date"
-                      value={form.fecha_fin}
-                      onChange={(e) => setForm((prev) => ({ ...prev, fecha_fin: e.target.value }))}
-                      style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
-                    />
-                  </label>
-                </div>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Fecha inicio</span>
+                  <input
+                    type="date"
+                    value={form.fecha_inicio}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fecha_inicio: e.target.value }))}
+                    style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
+                  />
+                </label>
 
                 <label style={{ display: 'grid', gap: '6px' }}>
                   <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Motivo ingreso</span>

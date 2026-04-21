@@ -1153,8 +1153,6 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
       FROM beneficiario_alimentacion 
       WHERE id_alumno = $1 
         AND activo = true
-        AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_DATE)
-        AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_DATE)
     `;
     const resBenef = await pool.query(queryBenef, [alumno.id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
@@ -1218,8 +1216,6 @@ app.get('/api/students/:id/status', verifyToken, verifyRole(['lector', 'admin'])
       SELECT activo, fecha_inicio, fecha_fin, motivo_ingreso
       FROM beneficiario_alimentacion 
       WHERE id_alumno = $1 AND activo = true
-        AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_DATE)
-        AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_DATE)
     `;
     const resBenef = await pool.query(queryBenef, [alumno.id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
@@ -1262,8 +1258,6 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
     const queryBenef = `
       SELECT activo FROM beneficiario_alimentacion 
       WHERE id_alumno = $1 AND activo = true
-        AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_DATE)
-        AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_DATE)
     `;
     const resBenef = await pool.query(queryBenef, [id_alumno]);
     const esBeneficiario = resBenef.rows.length > 0;
@@ -1540,7 +1534,6 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
   const idAlumno = parseInt(req.body?.id_alumno ?? req.body?.idAlumno, 10);
   const activo = toBooleanOrNull(req.body?.activo);
   const fechaInicio = normalizeDateInput(req.body?.fecha_inicio ?? req.body?.fechaInicio);
-  const fechaFin = normalizeDateInput(req.body?.fecha_fin ?? req.body?.fechaFin);
   const motivoIngreso = toNullable(req.body?.motivo_ingreso ?? req.body?.motivoIngreso);
 
   if (!Number.isInteger(idAlumno) || idAlumno <= 0 || activo === null) {
@@ -1561,7 +1554,7 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
     const result = await upsertBeneficiaryRecord(client, idAlumno, {
       activo,
       fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin,
+      fecha_fin: null,
       motivo_ingreso: motivoIngreso
     });
 
@@ -1638,7 +1631,7 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), 
         const beneficiaryResult = await upsertBeneficiaryRecord(client, alumno.id_alumno, {
           activo,
           fecha_inicio: normalizeDateInput(row.fecha_inicio ?? row.fechaInicio) || monthInfo.firstDay,
-          fecha_fin: normalizeDateInput(row.fecha_fin ?? row.fechaFin),
+          fecha_fin: null,
           motivo_ingreso: toNullable(row.motivo_ingreso ?? row.motivoIngreso)
         });
 
@@ -1786,7 +1779,7 @@ app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin'
         const beneficiaryResult = await upsertBeneficiaryRecord(client, idAlumno, {
           activo: true,
           fecha_inicio: monthInfo.firstDay,
-          fecha_fin: monthInfo.lastDay,
+          fecha_fin: null,
           motivo_ingreso: porcentajeValue ? `PAE ${porcentajeValue}` : 'PAE'
         });
 

@@ -516,6 +516,10 @@ const BeneficiariosAdmin = () => {
 
       const errors = Array.isArray(res.data?.errors) ? res.data.errors : [];
       const warnings = Array.isArray(res.data?.warnings) ? res.data.warnings : [];
+      const importedTotal =
+        (res.data?.beneficiarios_insertados || 0) +
+        (res.data?.beneficiarios_actualizados || 0) +
+        (res.data?.beneficiarios_sin_cambios || 0);
       console.log('[beneficiarios/import-pae] Respuesta importacion', res.data);
       if (warnings.length > 0) {
         console.warn('[beneficiarios/import-pae] Warnings', warnings);
@@ -525,7 +529,11 @@ const BeneficiariosAdmin = () => {
       }
 
       setPaeImportResult(res.data);
-      setMessage('Importación PAE completada correctamente (sin asistencias retroactivas).');
+      if (errors.length === 0 && warnings.length === 0 && importedTotal > 0) {
+        setMessage('Importación PAE completada correctamente (sin asistencias retroactivas).');
+      } else {
+        setMessage('');
+      }
       await fetchData();
     } catch (err) {
       console.error(err);
@@ -543,6 +551,35 @@ const BeneficiariosAdmin = () => {
     const hayTermino = `${rutCompleto} ${item.rut || ''} ${item.dv || ''} ${item.nombres || ''} ${item.paterno || ''} ${item.materno || ''} ${item.nombre_curso || ''}`.toLowerCase();
     return hayTermino.includes(searchTerm.toLowerCase());
   });
+
+  const paeImportedTotal =
+    (paeImportResult?.beneficiarios_insertados || 0) +
+    (paeImportResult?.beneficiarios_actualizados || 0) +
+    (paeImportResult?.beneficiarios_sin_cambios || 0);
+  const paeHasIssues =
+    Boolean(paeImportResult) &&
+    ((paeImportResult?.errors?.length || 0) > 0 ||
+      (paeImportResult?.warnings?.length || 0) > 0 ||
+      paeImportedTotal === 0);
+  const paeResultPanelStyle = paeHasIssues
+    ? {
+        background: 'rgba(245, 158, 11, 0.08)',
+        border: '1px solid rgba(245, 158, 11, 0.35)',
+        borderRadius: '6px',
+        padding: '12px',
+        marginBottom: '16px',
+        fontSize: '0.85rem'
+      }
+    : {
+        background: 'rgba(5, 150, 105, 0.05)',
+        border: '1px solid rgba(5, 150, 105, 0.2)',
+        borderRadius: '6px',
+        padding: '12px',
+        marginBottom: '16px',
+        fontSize: '0.85rem'
+      };
+  const paeResultTitleColor = paeHasIssues ? '#d97706' : '#059669';
+  const paeResultDetailColor = paeHasIssues ? '#b45309' : 'var(--text-light)';
 
   return (
     <div className="students-page">
@@ -874,13 +911,13 @@ const BeneficiariosAdmin = () => {
             {paeImportError && <div className="alert error" style={{ marginBottom: '16px' }}>{paeImportError}</div>}
 
             {paeImportResult && (
-              <div style={{ background: 'rgba(5, 150, 105, 0.05)', border: '1px solid rgba(5, 150, 105, 0.2)', borderRadius: '6px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
-                <div style={{ fontWeight: 600, color: '#059669', marginBottom: '6px' }}>Resultado de importación PAE:</div>
+              <div style={paeResultPanelStyle}>
+                <div style={{ fontWeight: 600, color: paeResultTitleColor, marginBottom: '6px' }}>Resultado de importación PAE:</div>
                 <div>
                   Total: {paeImportResult.total} | Insertados: {paeImportResult.beneficiarios_insertados} | Actualizados: {paeImportResult.beneficiarios_actualizados} | Sin cambios: {paeImportResult.beneficiarios_sin_cambios} | Errores: {paeImportResult.errors?.length || 0}
                 </div>
                 {paeImportResult.warnings && paeImportResult.warnings.length > 0 && (
-                  <div style={{ marginTop: '8px', color: 'var(--text-light)' }}>
+                  <div style={{ marginTop: '8px', color: paeResultDetailColor }}>
                     Advertencias: {paeImportResult.warnings.length}
                   </div>
                 )}

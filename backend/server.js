@@ -1803,18 +1803,22 @@ app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin'
 
         const expectedDv = calculateRutDv(rut);
         if (dv && expectedDv && dv !== expectedDv) {
-          summary.warnings.push({
+          summary.errors.push({
             row: excelRowNumber,
-            message: `DV inconsistente para RUN ${rut}: recibido ${dv}, esperado ${expectedDv}. Se procesa por RUN.`
+            message: `DV inconsistente para RUN ${rut}: recibido ${dv}, esperado ${expectedDv}. Fila omitida.`
           });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+          continue;
         }
 
         const studentDv = sanitizeText(studentRow.dv).toUpperCase();
         if (dv && studentDv && dv !== studentDv) {
-          summary.warnings.push({
+          summary.errors.push({
             row: excelRowNumber,
-            message: `DV del archivo (${dv}) no coincide con DV en BD (${studentDv}) para RUN ${rut}. Se procesa por RUN.`
+            message: `DV del archivo (${dv}) no coincide con DV en BD (${studentDv}) para RUN ${rut}. Fila omitida.`
           });
+          await client.query(`RELEASE SAVEPOINT ${rowSavepoint}`);
+          continue;
         }
 
         // Crear/actualizar beneficiario_alimentacion (SIN lunch_registrations)

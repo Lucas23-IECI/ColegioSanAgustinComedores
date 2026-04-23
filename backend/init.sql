@@ -48,6 +48,7 @@ CREATE TABLE alumno (
   direccion VARCHAR(255),
   fecha_actualizacion TIMESTAMP,
   codigo_barra VARCHAR(100) UNIQUE, -- NUEVO: Campo único para lector de tarjetas
+  tne_codigo_barra VARCHAR(100),
   activo BOOLEAN DEFAULT true     -- NUEVO: Borrado lógico, en lugar de borrar la fila
 );
 

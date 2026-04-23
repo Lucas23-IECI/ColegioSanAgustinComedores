@@ -154,6 +154,7 @@ const ensureExcelDerivedTables = async () => {
   // Compatibilidad hacia adelante: evita fallos por textos largos al importar desde Excel.
   await pool.query(`ALTER TABLE alumno ALTER COLUMN sexo TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE alumno ALTER COLUMN telefono TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE alumno ADD COLUMN IF NOT EXISTS tne_codigo_barra VARCHAR(100)`);
   await pool.query(`ALTER TABLE persona_contacto ALTER COLUMN telefono TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE persona_contacto_detalle ALTER COLUMN telefono_empresa TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE alumno_complemento ALTER COLUMN foto TYPE VARCHAR(255)`);
@@ -646,6 +647,7 @@ const parseStudentRow = (row) => {
   const grade = cursoRaw || ensenanzaRaw;
 
   const codigoBarra = pickRowValue(row, ['codigo_barra', 'codigo barra', 'barcode', 'codigo tarjeta', 'id tarjeta', 'codigo qr', 'qr']);
+  const tneCodigoBarra = pickRowValue(row, ['tne', 'codigo_tne', 'codigo tne', 'tne_codigo_barra', 'barcode tne', 'codigo barra tne']);
 
   const email = pickRowValue(row, ['email', 'correo', 'correo electronico', 'mail']);
   const telefono = pickRowValue(row, ['telefono', 'teléfono', 'telefono alumno']);
@@ -747,6 +749,7 @@ const parseStudentRow = (row) => {
     materno,
     grade,
     codigoBarra,
+    tneCodigoBarra,
     email,
     telefono,
     direccion: [direccion, comuna, ciudad].filter(Boolean).join(', '),
@@ -899,7 +902,7 @@ const resolveBeneficiaryStudent = async (client, row) => {
     if (byEmail.rows[0]) return byEmail.rows[0];
   }
 
-  const barcode = sanitizeText(row.codigo_barra || row.codigoBarra || row.barcode);
+  const barcode = sanitizeText(row.codigo_barra || row.codigoBarra || row.barcode || row.tne || row.codigo_tne || row.tne_codigo_barra);
   if (barcode) {
     const byBarcode = await client.query(
       `
@@ -908,6 +911,7 @@ const resolveBeneficiaryStudent = async (client, row) => {
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
         WHERE LOWER(a.codigo_barra) = LOWER($1)
+           OR LOWER(a.tne_codigo_barra) = LOWER($1)
         LIMIT 1
       `,
       [barcode]
@@ -1103,12 +1107,12 @@ app.get('/api/students/search', verifyToken, verifyRole(['lector', 'admin']), as
       query = `
         SELECT a.id_alumno,
           TRIM(CONCAT_WS(' ', a.nombres, NULLIF(a.paterno, ''), NULLIF(a.materno, ''))) AS name,
-          a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
+          a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, a.tne_codigo_barra, c.nombre_curso
         FROM alumno a
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
         WHERE a.activo = true
-          AND (a.rut LIKE $1 OR a.codigo_barra LIKE $1)
+          AND (a.rut LIKE $1 OR a.codigo_barra LIKE $1 OR a.tne_codigo_barra LIKE $1)
         ORDER BY a.paterno, a.nombres
         LIMIT 10
       `;
@@ -1119,7 +1123,7 @@ app.get('/api/students/search', verifyToken, verifyRole(['lector', 'admin']), as
       query = `
         SELECT a.id_alumno,
           TRIM(CONCAT_WS(' ', a.nombres, NULLIF(a.paterno, ''), NULLIF(a.materno, ''))) AS name,
-          a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
+          a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, a.tne_codigo_barra, c.nombre_curso
         FROM alumno a
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
@@ -1152,11 +1156,12 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
 
   try {
     const queryAlumno = `
-      SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.activo as alumno_activo, c.nombre_curso
+      SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, a.tne_codigo_barra, a.activo as alumno_activo, c.nombre_curso
       FROM alumno a
       LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
       LEFT JOIN curso c ON m.id_curso = c.id_curso
-      WHERE a.codigo_barra = $1
+      WHERE LOWER(a.codigo_barra) = LOWER($1)
+        OR LOWER(a.tne_codigo_barra) = LOWER($1)
     `;
     const resultAlumno = await pool.query(queryAlumno, [barcode]);
     if (resultAlumno.rows.length === 0) {
@@ -1495,6 +1500,8 @@ app.get('/api/students', verifyToken, verifyRole(['admin']), async (req, res) =>
       SELECT a.id_alumno as id, a.rut,
         TRIM(CONCAT_WS(' ', a.nombres, NULLIF(a.paterno, ''), NULLIF(a.materno, ''))) as name,
         c.nombre_curso as grade, a.activo,
+        a.codigo_barra,
+        a.tne_codigo_barra,
         COALESCE(b.activo, false) as es_beneficiario
       FROM alumno a
       LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
@@ -1539,6 +1546,8 @@ app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (r
         a.paterno,
         a.materno,
         a.email,
+        a.codigo_barra,
+        a.tne_codigo_barra,
         a.activo AS alumno_activo,
         c.nombre_curso
       FROM beneficiarios_ordenados bo
@@ -1560,6 +1569,11 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
   const activo = toBooleanOrNull(req.body?.activo);
   const fechaInicio = normalizeDateInput(req.body?.fecha_inicio ?? req.body?.fechaInicio);
   const motivoIngreso = toNullable(req.body?.motivo_ingreso ?? req.body?.motivoIngreso);
+  const hasTneField =
+    Object.prototype.hasOwnProperty.call(req.body || {}, 'tne_codigo_barra') ||
+    Object.prototype.hasOwnProperty.call(req.body || {}, 'tneCodigoBarra');
+  const tneCodigoBarraRaw = req.body?.tne_codigo_barra ?? req.body?.tneCodigoBarra;
+  const tneCodigoBarra = sanitizeText(tneCodigoBarraRaw);
 
   if (!Number.isInteger(idAlumno) || idAlumno <= 0 || activo === null) {
     return res.status(400).json({ message: 'Faltan datos obligatorios para beneficiarios.' });
@@ -1576,6 +1590,17 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
       return res.status(404).json({ message: 'Alumno no encontrado.' });
     }
 
+    if (hasTneField) {
+      await client.query(
+        `
+          UPDATE alumno
+          SET tne_codigo_barra = $1
+          WHERE id_alumno = $2
+        `,
+        [tneCodigoBarra || null, idAlumno]
+      );
+    }
+
     const result = await upsertBeneficiaryRecord(client, idAlumno, {
       activo,
       fecha_inicio: fechaInicio,
@@ -1588,6 +1613,9 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err.message);
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'El código TNE ya está asignado a otro alumno.' });
+    }
     res.status(500).json({ message: 'Error al guardar beneficiario.' });
   } finally {
     client.release();
@@ -1962,6 +1990,8 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
               a.fecha_nacimiento,
               a.fecha_actualizacion,
               a.dv,
+              COALESCE(a.codigo_barra, '') AS codigo_barra,
+              COALESCE(a.tne_codigo_barra, '') AS tne_codigo_barra,
               a.activo,
               m.id_matricula,
               m.id_curso
@@ -1986,8 +2016,8 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
         if (!existing) {
           const insertedStudent = await client.query(
             `
-              INSERT INTO alumno (matricula, rut, dv, nombres, paterno, materno, fecha_nacimiento, sexo, email, telefono, direccion, codigo_barra, activo)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              INSERT INTO alumno (matricula, rut, dv, nombres, paterno, materno, fecha_nacimiento, sexo, email, telefono, direccion, codigo_barra, tne_codigo_barra, activo)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
               RETURNING id_alumno
             `,
             [
@@ -2003,6 +2033,7 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
               normalized.telefono || null,
               normalized.direccion || null,
               normalized.codigoBarra || null,
+              normalized.tneCodigoBarra || null,
               normalized.activo === null ? true : normalized.activo
             ]
           );
@@ -2028,6 +2059,7 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
             telefono: hasIncomingValue(normalized.telefono) ? normalized.telefono : (existing.telefono || null),
             direccion: hasIncomingValue(normalized.direccion) ? normalized.direccion : (existing.direccion || null),
             codigo_barra: hasIncomingValue(normalized.codigoBarra) ? normalized.codigoBarra : (existing.codigo_barra || null),
+            tne_codigo_barra: hasIncomingValue(normalized.tneCodigoBarra) ? normalized.tneCodigoBarra : (existing.tne_codigo_barra || null),
             activo: incomingActivo,
             fecha_actualizacion: normalized.fechaActualizacion !== null
               ? normalized.fechaActualizacion
@@ -2047,6 +2079,7 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
             (normalized.fechaActualizacion !== null && (existing.fecha_actualizacion ? new Date(existing.fecha_actualizacion).toISOString() : null) !== normalized.fechaActualizacion) ||
             (existing.dv || '') !== (nextStudentPayload.dv || '') ||
             (existing.codigo_barra || '') !== (nextStudentPayload.codigo_barra || '') ||
+            (existing.tne_codigo_barra || '') !== (nextStudentPayload.tne_codigo_barra || '') ||
             existing.activo !== incomingActivo;
 
           const nextFechaActualizacion = nextStudentPayload.fecha_actualizacion;
@@ -2066,9 +2099,10 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
                     telefono = $9,
                     direccion = $10,
                     codigo_barra = $11,
-                    activo = $12,
-                    fecha_actualizacion = $13
-                WHERE id_alumno = $14
+                    tne_codigo_barra = $12,
+                    activo = $13,
+                    fecha_actualizacion = $14
+                WHERE id_alumno = $15
               `,
               [
                 nextStudentPayload.matricula,
@@ -2082,6 +2116,7 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
                 nextStudentPayload.telefono,
                 nextStudentPayload.direccion,
                 nextStudentPayload.codigo_barra,
+                nextStudentPayload.tne_codigo_barra,
                 incomingActivo,
                 nextFechaActualizacion,
                 idAlumno

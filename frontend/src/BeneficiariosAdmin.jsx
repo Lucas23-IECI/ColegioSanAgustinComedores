@@ -282,7 +282,8 @@ const emptyForm = {
   id_alumno: '',
   activo: true,
   fecha_inicio: '',
-  motivo_ingreso: ''
+  motivo_ingreso: '',
+  tne_codigo_barra: ''
 };
 
 const BeneficiariosAdmin = () => {
@@ -351,7 +352,8 @@ const BeneficiariosAdmin = () => {
       id_alumno: String(item.id_alumno || ''),
       activo: Boolean(item.activo),
       fecha_inicio: formatDateInput(item.fecha_inicio),
-      motivo_ingreso: item.motivo_ingreso || ''
+      motivo_ingreso: item.motivo_ingreso || '',
+      tne_codigo_barra: item.tne_codigo_barra || ''
     });
     setMessage('');
     setError('');
@@ -378,7 +380,8 @@ const BeneficiariosAdmin = () => {
           id_alumno: idAlumno,
           activo: Boolean(form.activo),
           fecha_inicio: form.fecha_inicio || null,
-          motivo_ingreso: form.motivo_ingreso || null
+          motivo_ingreso: form.motivo_ingreso || null,
+          tne_codigo_barra: form.tne_codigo_barra || null
         },
         { withCredentials: true }
       );
@@ -743,6 +746,17 @@ const BeneficiariosAdmin = () => {
                     value={form.motivo_ingreso}
                     onChange={(e) => setForm((prev) => ({ ...prev, motivo_ingreso: e.target.value }))}
                     placeholder="JUNAEB, vulnerabilidad, apoyo temporal, etc."
+                    style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
+                  />
+                </label>
+
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Código TNE (alternativo)</span>
+                  <input
+                    type="text"
+                    value={form.tne_codigo_barra}
+                    onChange={(e) => setForm((prev) => ({ ...prev, tne_codigo_barra: e.target.value }))}
+                    placeholder="Código de barra de tarjeta TNE"
                     style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
                   />
                 </label>

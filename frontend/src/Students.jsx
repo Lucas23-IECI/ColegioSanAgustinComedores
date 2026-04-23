@@ -176,6 +176,10 @@ function Students() {
     return String(value);
   };
 
+  const formatFullName = (student) => {
+    return [student?.nombres, student?.paterno, student?.materno].filter(Boolean).join(' ') || 'N/D';
+  };
+
   return (
     <div className="students-page">
       <div className="students-card">
@@ -430,7 +434,7 @@ function Students() {
               ) : studentDetails ? (
                  <div className="fade-in">
                     <h2 style={{color: 'var(--primary)', marginBottom: '5px', marginTop: 0}}>
-                      Expediente: {studentDetails.alumno.nombres} {studentDetails.alumno.paterno}
+                      Expediente: {formatFullName(studentDetails.alumno)}
                     </h2>
                     <p style={{color: 'var(--text-light)', marginBottom: '25px', display: 'flex', flexWrap:'wrap', gap:'15px'}}>
                       <span>RUT: {studentDetails.alumno.rut}-{studentDetails.alumno.dv}</span>

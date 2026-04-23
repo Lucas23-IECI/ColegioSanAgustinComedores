@@ -1101,7 +1101,9 @@ app.get('/api/students/search', verifyToken, verifyRole(['lector', 'admin']), as
     if (looksLikeRut) {
       // Buscar por RUT parcial o código de barra
       query = `
-        SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
+        SELECT a.id_alumno,
+          TRIM(CONCAT_WS(' ', a.nombres, NULLIF(a.paterno, ''), NULLIF(a.materno, ''))) AS name,
+          a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
         FROM alumno a
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
@@ -1115,7 +1117,9 @@ app.get('/api/students/search', verifyToken, verifyRole(['lector', 'admin']), as
       // Buscar por nombre (paterno, materno o nombres) — ILIKE para case-insensitive
       const searchTerm = `%${term}%`;
       query = `
-        SELECT a.id_alumno, a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
+        SELECT a.id_alumno,
+          TRIM(CONCAT_WS(' ', a.nombres, NULLIF(a.paterno, ''), NULLIF(a.materno, ''))) AS name,
+          a.nombres, a.paterno, a.materno, a.rut, a.dv, a.codigo_barra, c.nombre_curso
         FROM alumno a
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
@@ -1488,7 +1492,9 @@ app.get('/api/lunches/history', verifyToken, verifyRole(['lector', 'admin']), as
 app.get('/api/students', verifyToken, verifyRole(['admin']), async (req, res) => {
   try {
     const query = `
-      SELECT a.id_alumno as id, a.rut, a.nombres || ' ' || a.paterno as name, c.nombre_curso as grade, a.activo,
+      SELECT a.id_alumno as id, a.rut,
+        TRIM(CONCAT_WS(' ', a.nombres, NULLIF(a.paterno, ''), NULLIF(a.materno, ''))) as name,
+        c.nombre_curso as grade, a.activo,
         COALESCE(b.activo, false) as es_beneficiario
       FROM alumno a
       LEFT JOIN matricula m ON a.id_alumno = m.id_alumno

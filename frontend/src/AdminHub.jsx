@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Utensils, Users, LogOut, ChevronRight, ShieldCheck } from 'lucide-react';
 import { AuthContext } from './context/AuthContext';
 
-const modules = [
+const ALL_MODULES = [
   {
     key: 'alimentacion',
     icon: Utensils,
@@ -12,6 +12,7 @@ const modules = [
     path: '/admin/alimentacion',
     color: '#4F46E5',
     bg: 'rgba(79, 70, 229, 0.08)',
+    roles: ['admin', 'asistente_social'],
   },
   {
     key: 'beneficiarios',
@@ -21,6 +22,7 @@ const modules = [
     path: '/admin/beneficiarios',
     color: '#059669',
     bg: 'rgba(5, 150, 105, 0.08)',
+    roles: ['admin', 'asistente_social'],
   },
   {
     key: 'estudiantes',
@@ -30,12 +32,15 @@ const modules = [
     path: '/admin/estudiantes',
     color: '#7C3AED',
     bg: 'rgba(124, 58, 237, 0.08)',
+    roles: ['admin'],
   },
 ];
 
 const AdminHub = () => {
   const navigate = useNavigate();
   const { logout, user } = useContext(AuthContext);
+
+  const modules = ALL_MODULES.filter(m => m.roles.includes(user?.rol));
 
   const handleLogout = () => {
     logout();
@@ -52,10 +57,6 @@ const AdminHub = () => {
               Bienvenido, <strong>{user?.correo}</strong>
             </p>
           </div>
-          <button onClick={handleLogout} className="hub-logout">
-            <LogOut size={18} />
-            <span>Salir</span>
-          </button>
         </header>
 
         <p className="hub-prompt">Selecciona el módulo al que deseas acceder:</p>
@@ -77,6 +78,16 @@ const AdminHub = () => {
               </span>
             </button>
           ))}
+          <button className="hub-module hub-module--logout" onClick={handleLogout}>
+            <div className="hub-module-icon" style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#EF4444' }}>
+              <LogOut size={28} />
+            </div>
+            <h3 className="hub-module-title">Cerrar sesión</h3>
+            <p className="hub-module-desc">Salir del sistema de forma segura.</p>
+            <span className="hub-module-go" style={{ color: '#EF4444' }}>
+              Salir <ChevronRight size={16} />
+            </span>
+          </button>
         </div>
       </div>
     </div>

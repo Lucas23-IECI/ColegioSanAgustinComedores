@@ -16,3 +16,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+.agents/*
+agents/
+
+CONTEXTO_COMPLETO.md
+docs/CONTEXTO_COMPLETO.md

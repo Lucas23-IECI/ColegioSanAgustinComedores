@@ -31,6 +31,11 @@ function Students() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [courseSearch, setCourseSearch] = useState('');
+  const [filterEstado, setFilterEstado] = useState('');
+  const [filterJunaeb, setFilterJunaeb] = useState('');
 
   const [excelRows, setExcelRows] = useState([]);
   const [previewRows, setPreviewRows] = useState([]);
@@ -48,6 +53,10 @@ function Students() {
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedCourse, searchTerm, filterEstado, filterJunaeb]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -167,9 +176,15 @@ function Students() {
      : (courseGroups[selectedCourse] || []);
 
   const filtered = currentStudents.filter(s => {
-    return s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchText = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
            s.rut.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchEstado = filterEstado === '' ? true : filterEstado === 'activo' ? s.activo : !s.activo;
+    const matchJunaeb = filterJunaeb === '' ? true : filterJunaeb === 'si' ? s.es_beneficiario : !s.es_beneficiario;
+    return matchText && matchEstado && matchJunaeb;
   });
+
+  const stuTotalPages = Math.ceil(filtered.length / pageSize);
+  const paginatedStudents = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const formatNullable = (value) => {
     if (value === null || value === undefined || String(value).trim() === '') return 'N/D';
@@ -235,9 +250,20 @@ function Students() {
           <div className="loader">Cargando padrón...</div>
         ) : activeSection === 'listado' && !selectedCourse ? (
           <div className="fade-in">
-             <p style={{color: 'var(--text-light)', marginBottom: '20px'}}>
+             <p style={{color: 'var(--text-light)', marginBottom: '16px'}}>
                 Selecciona la nómina de un curso para inspeccionar su universo de alumnos.
              </p>
+             <div style={{marginBottom: '16px'}}>
+               <div className="students-search" style={{maxWidth: '360px'}}>
+                 <Search size={16} />
+                 <input
+                   type="text"
+                   placeholder="Buscar curso..."
+                   value={courseSearch}
+                   onChange={(e) => setCourseSearch(e.target.value)}
+                 />
+               </div>
+             </div>
              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px'}}>
                 <div 
                   className="registration-card"
@@ -249,7 +275,9 @@ function Students() {
                   <p style={{color: 'var(--text-light)', margin: 0}}>Padrón Global ({students.length})</p>
                 </div>
 
-                {Object.keys(courseGroups).sort().map(curso => (
+                {Object.keys(courseGroups).sort()
+                  .filter(c => c.toLowerCase().includes(courseSearch.toLowerCase()))
+                  .map(curso => (
                    <div 
                      key={curso} 
                      className="registration-card"
@@ -265,8 +293,8 @@ function Students() {
           </div>
         ) : activeSection === 'listado' ? (
           <div className="fade-in">
-             <div style={{display: 'flex', gap: '15px', marginBottom: '20px'}}>
-               <div className="students-search" style={{flex: '1', minWidth: '250px'}}>
+             <div style={{display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap'}}>
+               <div className="students-search" style={{flex: '1', minWidth: '220px'}}>
                  <Search size={16} />
                  <input
                    type="text"
@@ -275,6 +303,26 @@ function Students() {
                    onChange={(e) => setSearchTerm(e.target.value)}
                  />
                </div>
+               <select
+                 className="pagination-size"
+                 value={filterEstado}
+                 onChange={(e) => setFilterEstado(e.target.value)}
+                 style={{padding: '10px 14px'}}
+               >
+                 <option value="">Estado: Todos</option>
+                 <option value="activo">Activa</option>
+                 <option value="inactivo">Retirado</option>
+               </select>
+               <select
+                 className="pagination-size"
+                 value={filterJunaeb}
+                 onChange={(e) => setFilterJunaeb(e.target.value)}
+                 style={{padding: '10px 14px'}}
+               >
+                 <option value="">JUNAEB: Todos</option>
+                 <option value="si">Beneficiario</option>
+                 <option value="no">Sin beneficio</option>
+               </select>
              </div>
 
              <div className="students-table-wrap">
@@ -290,7 +338,7 @@ function Students() {
                    </tr>
                  </thead>
                  <tbody>
-                   {filtered.map(s => (
+                   {paginatedStudents.map(s => (
                      <tr key={s.id}>
                        <td className="students-cell-mono">{s.rut}</td>
                        <td className="students-cell-name">{s.name}</td>
@@ -315,6 +363,20 @@ function Students() {
                  </tbody>
                </table>
                {filtered.length === 0 && <p style={{textAlign: 'center', marginTop: '20px', color: 'var(--text-light)'}}>No hay estudiantes coincidentes en esta nómina.</p>}
+               {filtered.length > 0 && (
+                 <div className="pagination">
+                   <button className="pagination-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+                   <span className="pagination-info">Página {page} de {stuTotalPages} · {filtered.length} alumnos</span>
+                   <button className="pagination-btn" disabled={page === stuTotalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+                   <select
+                     className="pagination-size"
+                     value={pageSize}
+                     onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                   >
+                     {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n} por página</option>)}
+                   </select>
+                 </div>
+               )}
              </div>
           </div>
         ) : (

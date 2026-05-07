@@ -52,6 +52,11 @@ const ensureDefaultUsers = async () => {
     "INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, 'admin') ON CONFLICT (correo) DO NOTHING",
     ['admin@colegio.cl', hash]
   );
+
+  await pool.query(
+    "INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, 'asistente_social') ON CONFLICT (correo) DO UPDATE SET rol = 'asistente_social', password_hash = EXCLUDED.password_hash",
+    ['asistente_social@colegio.cl', hash]
+  );
 };
 
 const ensureExcelSnapshotTable = async () => {
@@ -1313,7 +1318,7 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
 });
 
 // === RESUMEN DEL DÍA ===
-app.get('/api/admin/alimentacion/resumen-dia', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.get('/api/admin/alimentacion/resumen-dia', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   try {
     // Conteos por tipo de alimentación hoy
     const countQuery = `
@@ -1352,7 +1357,7 @@ app.get('/api/admin/alimentacion/resumen-dia', verifyToken, verifyRole(['admin']
 });
 
 // === REPORTE MATRICIAL DE ASISTENCIA ===
-app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   const { desde, hasta, tipo } = req.query;
   if (!desde || !hasta) return res.status(400).json({ message: 'Faltan fechas desde/hasta' });
 
@@ -1389,7 +1394,7 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin']), as
 });
 
 // === WIP ADMIN REPORTES ===
-app.get('/api/admin/reportes/recurrentes', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.get('/api/admin/reportes/recurrentes', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   try {
     const query = `
       SELECT a.rut, a.nombres, a.paterno, c.nombre_curso, COUNT(lr.id_registro) as total_consumos
@@ -1457,7 +1462,7 @@ app.get('/api/courses', verifyToken, async (req, res) => {
   }
 });
 
-app.get('/api/lunches/history', verifyToken, verifyRole(['lector', 'admin']), async (req, res) => {
+app.get('/api/lunches/history', verifyToken, verifyRole(['lector', 'admin', 'asistente_social']), async (req, res) => {
   const { from, to, curso, beneficiario } = req.query;
   try {
     let query = `
@@ -1494,7 +1499,7 @@ app.get('/api/lunches/history', verifyToken, verifyRole(['lector', 'admin']), as
 });
 
 // === MAESTRO ESTUDIANTES (PARA CRUD ADMIN) ===
-app.get('/api/students', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.get('/api/students', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   try {
     const query = `
       SELECT a.id_alumno as id, a.rut,
@@ -1517,7 +1522,7 @@ app.get('/api/students', verifyToken, verifyRole(['admin']), async (req, res) =>
   }
 });
 
-app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   try {
     const query = `
       WITH beneficiarios_ordenados AS (
@@ -1564,10 +1569,11 @@ app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (r
   }
 });
 
-app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   const idAlumno = parseInt(req.body?.id_alumno ?? req.body?.idAlumno, 10);
   const activo = toBooleanOrNull(req.body?.activo);
   const fechaInicio = normalizeDateInput(req.body?.fecha_inicio ?? req.body?.fechaInicio);
+  const fechaFin = normalizeDateInput(req.body?.fecha_fin ?? req.body?.fechaFin);
   const motivoIngreso = toNullable(req.body?.motivo_ingreso ?? req.body?.motivoIngreso);
   const hasTneField =
     Object.prototype.hasOwnProperty.call(req.body || {}, 'tne_codigo_barra') ||
@@ -1604,7 +1610,7 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
     const result = await upsertBeneficiaryRecord(client, idAlumno, {
       activo,
       fecha_inicio: fechaInicio,
-      fecha_fin: null,
+      fecha_fin: fechaFin,
       motivo_ingreso: motivoIngreso
     });
 
@@ -1622,7 +1628,7 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin']), async (
   }
 });
 
-app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   const monthInfo = parseBeneficiaryImportMonth(req.body?.month);
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const defaultActivoValue = toBooleanOrNull(req.body?.defaultActivo);
@@ -1755,7 +1761,7 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin']), 
 });
 
 // === IMPORTAR BENEFICIARIOS PAE (sin generar asistencias retroactivas) ===
-app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin']), async (req, res) => {
+app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
   const monthInfo = parseBeneficiaryImportMonth(req.body?.month);
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
 

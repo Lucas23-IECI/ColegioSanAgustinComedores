@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Upload,
   Users,
   X
@@ -282,6 +283,7 @@ const emptyForm = {
   id_alumno: '',
   activo: true,
   fecha_inicio: '',
+  fecha_fin: '',
   motivo_ingreso: '',
   tne_codigo_barra: ''
 };
@@ -291,6 +293,14 @@ const BeneficiariosAdmin = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterEstado, setFilterEstado] = useState('');
+  const [filterCurso, setFilterCurso] = useState('');
+  const [filterMotivo, setFilterMotivo] = useState('');
+  const [filterFechaDesde, setFilterFechaDesde] = useState('');
+  const [filterFechaHasta, setFilterFechaHasta] = useState('');
   const [activeTab, setActiveTab] = useState('listado');
   const [selectedBeneficiario, setSelectedBeneficiario] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -352,6 +362,7 @@ const BeneficiariosAdmin = () => {
       id_alumno: String(item.id_alumno || ''),
       activo: Boolean(item.activo),
       fecha_inicio: formatDateInput(item.fecha_inicio),
+      fecha_fin: formatDateInput(item.fecha_fin),
       motivo_ingreso: item.motivo_ingreso || '',
       tne_codigo_barra: item.tne_codigo_barra || ''
     });
@@ -380,6 +391,7 @@ const BeneficiariosAdmin = () => {
           id_alumno: idAlumno,
           activo: Boolean(form.activo),
           fecha_inicio: form.fecha_inicio || null,
+          fecha_fin: form.fecha_fin || null,
           motivo_ingreso: form.motivo_ingreso || null,
           tne_codigo_barra: form.tne_codigo_barra || null
         },
@@ -552,8 +564,28 @@ const BeneficiariosAdmin = () => {
   const filteredBeneficiarios = beneficiarios.filter((item) => {
     const rutCompleto = formatRutWithDv(item.rut, item.dv);
     const hayTermino = `${rutCompleto} ${item.rut || ''} ${item.dv || ''} ${item.nombres || ''} ${item.paterno || ''} ${item.materno || ''} ${item.nombre_curso || ''}`.toLowerCase();
-    return hayTermino.includes(searchTerm.toLowerCase());
+    if (!hayTermino.includes(searchTerm.toLowerCase())) return false;
+    if (filterEstado === 'activo' && !item.activo) return false;
+    if (filterEstado === 'inactivo' && item.activo) return false;
+    if (filterCurso && item.nombre_curso !== filterCurso) return false;
+    if (filterMotivo && (item.motivo_ingreso || '') !== filterMotivo) return false;
+    if (filterFechaDesde && item.fecha_inicio && item.fecha_inicio < filterFechaDesde) return false;
+    if (filterFechaHasta && item.fecha_inicio && item.fecha_inicio > filterFechaHasta) return false;
+    return true;
   });
+
+  const cursosUnicos = [...new Set(beneficiarios.map(b => b.nombre_curso).filter(Boolean))].sort();
+  const motivosUnicos = [...new Set(beneficiarios.map(b => b.motivo_ingreso).filter(Boolean))].sort();
+  const hayFiltrosActivos = filterEstado || filterCurso || filterMotivo || filterFechaDesde || filterFechaHasta;
+
+  const clearFilters = () => {
+    setFilterEstado(''); setFilterCurso(''); setFilterMotivo('');
+    setFilterFechaDesde(''); setFilterFechaHasta('');
+    setPage(1);
+  };
+
+  const beneTotalPages = Math.max(1, Math.ceil(filteredBeneficiarios.length / pageSize));
+  const paginatedBeneficiarios = filteredBeneficiarios.slice((page - 1) * pageSize, page * pageSize);
 
   const paeImportedTotal =
     (paeImportResult?.beneficiarios_insertados || 0) +
@@ -625,16 +657,24 @@ const BeneficiariosAdmin = () => {
 
         {activeTab === 'listado' && (
           <div className="fade-in">
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
               <div className="students-search" style={{ flex: '1', minWidth: '280px' }}>
                 <Search size={16} />
                 <input
                   type="text"
                   placeholder="Buscar por RUT, nombre o curso..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                 />
               </div>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => setShowFilters(v => !v)}
+                style={{ background: showFilters || hayFiltrosActivos ? 'rgba(79,70,229,0.1)' : 'rgba(0,0,0,0.04)', color: showFilters || hayFiltrosActivos ? 'var(--primary)' : 'var(--text-light)', border: `1px solid ${showFilters || hayFiltrosActivos ? 'rgba(79,70,229,0.25)' : 'rgba(0,0,0,0.1)'}` }}
+              >
+                <SlidersHorizontal size={16} /> Filtros{hayFiltrosActivos ? ` (${[filterEstado, filterCurso, filterMotivo, filterFechaDesde, filterFechaHasta].filter(Boolean).length})` : ''}
+              </button>
               <button
                 className="action-btn"
                 onClick={() => {
@@ -646,6 +686,35 @@ const BeneficiariosAdmin = () => {
                 <Plus size={16} /> Nuevo beneficiario
               </button>
             </div>
+
+            {showFilters && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', padding: '14px', background: 'rgba(79,70,229,0.03)', border: '1px solid rgba(79,70,229,0.1)', borderRadius: '12px' }}>
+                <select className="pagination-size" value={filterEstado} onChange={(e) => { setFilterEstado(e.target.value); setPage(1); }} style={{ padding: '9px 12px' }}>
+                  <option value="">Estado: Todos</option>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                </select>
+                <select className="pagination-size" value={filterCurso} onChange={(e) => { setFilterCurso(e.target.value); setPage(1); }} style={{ padding: '9px 12px' }}>
+                  <option value="">Curso: Todos</option>
+                  {cursosUnicos.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select className="pagination-size" value={filterMotivo} onChange={(e) => { setFilterMotivo(e.target.value); setPage(1); }} style={{ padding: '9px 12px' }}>
+                  <option value="">Motivo: Todos</option>
+                  {motivosUnicos.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-light)' }}>
+                  Desde <input type="date" value={filterFechaDesde} onChange={(e) => { setFilterFechaDesde(e.target.value); setPage(1); }} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit', fontSize: '0.85rem' }} />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-light)' }}>
+                  Hasta <input type="date" value={filterFechaHasta} onChange={(e) => { setFilterFechaHasta(e.target.value); setPage(1); }} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit', fontSize: '0.85rem' }} />
+                </label>
+                {hayFiltrosActivos && (
+                  <button type="button" className="action-btn cancel" onClick={clearFilters} style={{ fontSize: '0.83rem' }}>
+                    <X size={14} /> Limpiar filtros
+                  </button>
+                )}
+              </div>
+            )}
 
             {loading ? (
               <div className="loader">Cargando beneficiarios...</div>
@@ -663,7 +732,7 @@ const BeneficiariosAdmin = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredBeneficiarios.map((item) => (
+                    {paginatedBeneficiarios.map((item) => (
                       <tr key={item.id_beneficiario}>
                         <td>
                           <div style={{ fontWeight: 600, color: 'var(--text-dark)' }}>
@@ -695,6 +764,20 @@ const BeneficiariosAdmin = () => {
                 {filteredBeneficiarios.length === 0 && (
                   <p style={{ padding: '16px', color: 'var(--text-light)' }}>No hay beneficiarios coincidentes.</p>
                 )}
+                {filteredBeneficiarios.length > 0 && (
+                  <div className="pagination">
+                    <button className="pagination-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+                    <span className="pagination-info">Página {page} de {beneTotalPages} · {filteredBeneficiarios.length} beneficiarios</span>
+                    <button className="pagination-btn" disabled={page === beneTotalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+                    <select
+                      className="pagination-size"
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    >
+                      {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n} por página</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -702,9 +785,12 @@ const BeneficiariosAdmin = () => {
 
         {activeTab === 'edicion' && (
           <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
-            <form onSubmit={saveBeneficiario} style={{ background: 'white', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '16px', padding: '18px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>{selectedBeneficiario ? 'Editar beneficiario' : 'Agregar beneficiario'}</h3>
+            <form onSubmit={saveBeneficiario} style={{ background: 'white', border: `1px solid ${selectedBeneficiario ? 'rgba(79,70,229,0.18)' : 'rgba(0,0,0,0.06)'}`, borderRadius: '16px', padding: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', padding: '10px 14px', borderRadius: '10px', background: selectedBeneficiario ? 'rgba(79,70,229,0.06)' : 'rgba(5,150,105,0.06)' }}>
+                <h3 style={{ margin: 0, color: selectedBeneficiario ? 'var(--primary)' : '#059669', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {selectedBeneficiario ? <Edit3 size={17} /> : <Plus size={17} />}
+                  {selectedBeneficiario ? 'Editar beneficiario' : 'Agregar beneficiario'}
+                </h3>
                 {selectedBeneficiario && (
                   <button type="button" className="action-btn cancel" onClick={resetForm}>
                     <X size={16} /> Limpiar
@@ -715,18 +801,25 @@ const BeneficiariosAdmin = () => {
               <div style={{ display: 'grid', gap: '14px' }}>
                 <label style={{ display: 'grid', gap: '6px' }}>
                   <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Alumno</span>
-                  <select
-                    value={form.id_alumno}
-                    onChange={(e) => setForm((prev) => ({ ...prev, id_alumno: e.target.value }))}
-                    style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
-                  >
-                    <option value="">Selecciona un alumno</option>
-                    {students.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {getStudentLabel(student)}
-                      </option>
-                    ))}
-                  </select>
+                  {selectedBeneficiario ? (
+                    <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.08)', background: 'rgba(0,0,0,0.02)', fontFamily: 'inherit', color: 'var(--text-dark)', fontWeight: 600, fontSize: '0.9rem' }}>
+                      {`${selectedBeneficiario.nombres} ${selectedBeneficiario.paterno}${selectedBeneficiario.materno ? ' ' + selectedBeneficiario.materno : ''}`}
+                      <span style={{ fontWeight: 400, color: 'var(--text-light)', marginLeft: '8px' }}>{formatRutWithDv(selectedBeneficiario.rut, selectedBeneficiario.dv)}</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={form.id_alumno}
+                      onChange={(e) => setForm((prev) => ({ ...prev, id_alumno: e.target.value }))}
+                      style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
+                    >
+                      <option value="">Selecciona un alumno</option>
+                      {students.map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {getStudentLabel(student)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </label>
 
                 <label style={{ display: 'grid', gap: '6px' }}>
@@ -735,6 +828,16 @@ const BeneficiariosAdmin = () => {
                     type="date"
                     value={form.fecha_inicio}
                     onChange={(e) => setForm((prev) => ({ ...prev, fecha_inicio: e.target.value }))}
+                    style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
+                  />
+                </label>
+
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Fecha fin <span style={{ fontWeight: 400, fontSize: '0.8rem' }}>(opcional)</span></span>
+                  <input
+                    type="date"
+                    value={form.fecha_fin}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fecha_fin: e.target.value }))}
                     style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
                   />
                 </label>
@@ -775,19 +878,19 @@ const BeneficiariosAdmin = () => {
                   type="submit"
                   className="action-btn"
                   disabled={saving}
-                  style={{ justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10B981)', color: 'white', padding: '12px 16px' }}
+                  style={{ justifyContent: 'center', background: selectedBeneficiario ? 'linear-gradient(135deg, #4F46E5, #6366F1)' : 'linear-gradient(135deg, #059669, #10B981)', color: 'white', padding: '12px 16px' }}
                 >
                   {saving ? <RefreshCw size={16} className="spin" /> : <CheckCircle2 size={16} />} {saving ? 'Guardando...' : 'Guardar beneficiario'}
                 </button>
               </div>
             </form>
 
-            <div style={{ background: 'rgba(79, 70, 229, 0.04)', border: '1px solid rgba(79, 70, 229, 0.12)', borderRadius: '16px', padding: '18px' }}>
+            <div style={{ background: 'rgba(79, 70, 229, 0.04)', border: '1px solid rgba(79, 70, 229, 0.12)', borderRadius: '16px', padding: '18px', overflow: 'hidden', alignSelf: 'start' }}>
               <h3 style={{ marginTop: 0, color: 'var(--text-dark)' }}>Notas</h3>
-              <p style={{ color: 'var(--text-light)', lineHeight: 1.6, marginBottom: '12px' }}>
+              <p style={{ color: 'var(--text-light)', lineHeight: 1.6, marginBottom: '12px', wordBreak: 'break-word' }}>
                 El beneficiario se guarda por alumno. Si ya existe, el sistema actualiza el registro vigente en lugar de duplicarlo.
               </p>
-              <p style={{ color: 'var(--text-light)', lineHeight: 1.6, marginBottom: 0 }}>
+              <p style={{ color: 'var(--text-light)', lineHeight: 1.6, marginBottom: 0, wordBreak: 'break-word' }}>
                 La importación Excel usa la misma lógica y además genera las colaciones en <strong>lunch_registrations</strong> cuando encuentra marcas D/A en el mes seleccionado.
               </p>
             </div>

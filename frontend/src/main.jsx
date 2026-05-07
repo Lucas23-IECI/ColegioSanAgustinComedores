@@ -25,7 +25,7 @@ const RoleBasedHome = () => {
   if (loading) return null;
   if (!user) return <Navigate to="/login" />;
   
-  if (user.rol === 'admin') {
+  if (user.rol === 'admin' || user.rol === 'asistente_social') {
       return <Navigate to="/admin" />;
   }
   return <App />;
@@ -43,9 +43,9 @@ createRoot(document.getElementById('root')).render(
           <Route path="/scanner" element={<ProtectedRoute allowedRoles={['lector', 'admin']}><App /></ProtectedRoute>} />
           
           {/* Admin Tree */}
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminHub /></ProtectedRoute>} />
-          <Route path="/admin/alimentacion" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/beneficiarios" element={<ProtectedRoute allowedRoles={['admin']}><BeneficiariosAdmin /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'asistente_social']}><AdminHub /></ProtectedRoute>} />
+          <Route path="/admin/alimentacion" element={<ProtectedRoute allowedRoles={['admin', 'asistente_social']}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/beneficiarios" element={<ProtectedRoute allowedRoles={['admin', 'asistente_social']}><BeneficiariosAdmin /></ProtectedRoute>} />
           <Route path="/admin/estudiantes" element={<ProtectedRoute allowedRoles={['admin']}><Students /></ProtectedRoute>} />
           
         </Routes>

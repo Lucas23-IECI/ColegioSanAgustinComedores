@@ -291,6 +291,7 @@ const emptyForm = {
 const BeneficiariosAdmin = () => {
   const [beneficiarios, setBeneficiarios] = useState([]);
   const [students, setStudents] = useState([]);
+  const [studentSearch, setStudentSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
@@ -578,6 +579,17 @@ const BeneficiariosAdmin = () => {
   const motivosUnicos = [...new Set(beneficiarios.map(b => b.motivo_ingreso).filter(Boolean))].sort();
   const hayFiltrosActivos = filterEstado || filterCurso || filterMotivo || filterFechaDesde || filterFechaHasta;
 
+  // Función de normalización para búsqueda (quita diacríticos y baja a minúsculas)
+  const normalizeForSearchFixed = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  const normalizeForSearch = (v) => String(v || '').normalize('NFD').replace(/[ -\u036f]/g, '').toLowerCase();
+  const filteredStudents = students.filter((s) => {
+    if (!studentSearch) return true;
+    const term = studentSearch.trim().toLowerCase();
+    const hay = `${s.rut || ''} ${s.dv || ''} ${s.name || s.nombres || ''} ${s.apellidos || ''}`;
+    return normalizeForSearchFixed(hay).includes(normalizeForSearchFixed(term));
+  });
+
   const clearFilters = () => {
     setFilterEstado(''); setFilterCurso(''); setFilterMotivo('');
     setFilterFechaDesde(''); setFilterFechaHasta('');
@@ -807,18 +819,31 @@ const BeneficiariosAdmin = () => {
                       <span style={{ fontWeight: 400, color: 'var(--text-light)', marginLeft: '8px' }}>{formatRutWithDv(selectedBeneficiario.rut, selectedBeneficiario.dv)}</span>
                     </div>
                   ) : (
-                    <select
-                      value={form.id_alumno}
-                      onChange={(e) => setForm((prev) => ({ ...prev, id_alumno: e.target.value }))}
-                      style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
-                    >
-                      <option value="">Selecciona un alumno</option>
-                      {students.map((student) => (
-                        <option key={student.id} value={student.id}>
-                          {getStudentLabel(student)}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'grid', gap: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="Buscar alumno por RUT o nombre..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
+                      />
+                      <select
+                        value={form.id_alumno}
+                        onChange={(e) => setForm((prev) => ({ ...prev, id_alumno: e.target.value }))}
+                        size={6}
+                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit', maxHeight: '260px', overflow: 'auto' }}
+                      >
+                        <option value="">Selecciona un alumno</option>
+                        {filteredStudents.map((student) => (
+                          <option key={student.id} value={student.id}>
+                            {getStudentLabel(student)}
+                          </option>
+                        ))}
+                      </select>
+                      {studentSearch && filteredStudents.length === 0 && (
+                        <div style={{ color: 'var(--text-light)', fontSize: '0.86rem' }}>No se encontraron alumnos.</div>
+                      )}
+                    </div>
                   )}
                 </label>
 

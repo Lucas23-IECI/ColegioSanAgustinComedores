@@ -43,6 +43,7 @@ function Students() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [uploadError, setUploadError] = useState('');
+  const [toast, setToast] = useState(null);
   
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [studentDetails, setStudentDetails] = useState(null);
@@ -156,9 +157,14 @@ function Students() {
       fetchStudents();
       setSelectedCourse(null);
       setActiveSection('listado');
+      // Mostrar toast de éxito resumido y que desaparece solo
+      setToast({ type: 'success', text: `Sincronización completada — Insertados: ${res.data.inserted || 0}, Actualizados: ${res.data.updated || 0}` });
+      setTimeout(() => setToast(null), 4500);
     } catch (err) {
       console.error(err);
       setUploadError(err.response?.data?.message || 'Falló la sincronización de estudiantes.');
+      setToast({ type: 'error', text: err.response?.data?.message || 'Falló la sincronización de estudiantes.' });
+      setTimeout(() => setToast(null), 4500);
     } finally {
       setSyncing(false);
     }
@@ -670,6 +676,14 @@ function Students() {
                  </div>
               ) : null}
            </div>
+        </div>
+      )}
+      {/* Toast notification */}
+      {toast && (
+        <div style={{position: 'fixed', right: '20px', top: '20px', zIndex: 2000}}>
+          <div style={{minWidth: '260px', padding: '12px 14px', borderRadius: '10px', boxShadow: '0 8px 20px rgba(0,0,0,0.08)', background: toast.type === 'success' ? '#ECFDF5' : '#FEF2F2', border: `1px solid ${toast.type === 'success' ? '#34D399' : '#FCA5A5'}`, color: toast.type === 'success' ? '#065F46' : '#7F1D1D', fontWeight: 600}}>
+            {toast.text}
+          </div>
         </div>
       )}
     </div>

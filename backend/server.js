@@ -75,6 +75,25 @@ const ensureUsuariosColumnas = async () => {
   `);
 };
 
+const ensureAuditLogTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id             SERIAL PRIMARY KEY,
+      usuario_id     INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      usuario_correo VARCHAR(150),
+      accion         VARCHAR(60) NOT NULL,
+      entidad        VARCHAR(60),
+      entidad_id     INT,
+      detalle        JSONB,
+      ip             VARCHAR(45),
+      fecha          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_fecha   ON audit_log (fecha DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_accion  ON audit_log (accion)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_correo  ON audit_log (usuario_correo)`);
+};
+
 const ensureExcelDerivedTables = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS alumno_complemento (
@@ -1049,6 +1068,26 @@ const importLunchRegistrationsFromBeneficiaries = async (client, idAlumno, month
   return { inserted, skipped, month: monthInfo.monthKey };
 };
 
+// === UTILIDADES INTERNAS ===
+
+const getClientIp = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.socket?.remoteAddress || null;
+};
+
+/**
+ * Registra una acción en audit_log de forma fire-and-forget.
+ * Nunca lanza ni propaga errores para no romper el flujo principal.
+ */
+const registrarAudit = ({ usuario_id = null, usuario_correo = null, accion, entidad = null, entidad_id = null, detalle = null, ip = null }) => {
+  pool.query(
+    `INSERT INTO audit_log (usuario_id, usuario_correo, accion, entidad, entidad_id, detalle, ip)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [usuario_id, usuario_correo, accion, entidad, entidad_id, detalle ? JSON.stringify(detalle) : null, ip]
+  ).catch(err => console.error('[audit] Error registrando acción:', err.message));
+};
+
 // === AUTENTICACIÓN ===
 app.post('/api/auth/login', async (req, res) => {
   const { correo, password } = req.body;
@@ -1057,12 +1096,14 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const userQuery = await pool.query('SELECT * FROM usuarios WHERE correo = $1', [correo.trim()]);
     if (userQuery.rows.length === 0) {
+      registrarAudit({ accion: 'LOGIN_FALLIDO', detalle: { correo: correo.trim(), motivo: 'usuario_no_existe' }, ip: getClientIp(req) });
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
     const user = userQuery.rows[0];
     const passMatch = await bcrypt.compare(password, user.password_hash);
     if (!passMatch) {
+      registrarAudit({ usuario_id: user.id, usuario_correo: user.correo, accion: 'LOGIN_FALLIDO', detalle: { motivo: 'password_incorrecta' }, ip: getClientIp(req) });
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
@@ -1080,6 +1121,7 @@ app.post('/api/auth/login', async (req, res) => {
       maxAge: 8 * 60 * 60 * 1000 // 8 Horas
     });
 
+    registrarAudit({ usuario_id: user.id, usuario_correo: user.correo, accion: 'LOGIN_EXITOSO', detalle: { rol: user.rol }, ip: getClientIp(req) });
     res.json({ user: { id: user.id, correo: user.correo, rol: user.rol } });
   } catch (err) {
     console.error(err.message);
@@ -1094,6 +1136,15 @@ app.get('/api/auth/me', verifyToken, (req, res) => {
 
 // Elimina la cookie al salir
 app.post('/api/auth/logout', (req, res) => {
+  try {
+    const token = req.cookies?.token;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        registrarAudit({ usuario_id: decoded.id, usuario_correo: decoded.correo, accion: 'LOGOUT', ip: getClientIp(req) });
+      } catch (_) { /* token expirado o inválido, igual se limpia */ }
+    }
+  } catch (_) {}
   res.clearCookie('token');
   res.json({ message: 'Logout exitoso' });
 });
@@ -1287,7 +1338,7 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
   if (!id_alumno || !tipoAlimentacionNormalizado) return res.status(400).json({ message: 'Faltan datos' });
 
   try {
-     const queryAlumno = `SELECT activo FROM alumno WHERE id_alumno = $1`;
+     const queryAlumno = `SELECT activo, nombres, paterno, materno FROM alumno WHERE id_alumno = $1`;
      const resAlu = await pool.query(queryAlumno, [id_alumno]);
      if (resAlu.rows.length === 0 || !resAlu.rows[0].activo) {
         return res.status(403).json({ message: 'No se puede registrar consumo a alumno inactivo' });
@@ -1316,6 +1367,17 @@ app.post('/api/lunches', verifyToken, verifyRole(['lector', 'admin']), async (re
     `;
     const result = await pool.query(queryInsert, [id_alumno, tipoAlimentacionNormalizado, esBeneficiario]);
 
+    const alu = resAlu.rows[0];
+    const nombreAlumno = `${(alu.paterno || '').trim()} ${(alu.materno || '').trim()}, ${(alu.nombres || '').trim()}`.trim();
+    registrarAudit({
+      usuario_id: req.user.id,
+      usuario_correo: req.user.correo,
+      accion: 'COLACION_REGISTRADA',
+      entidad: 'alumno',
+      entidad_id: id_alumno,
+      detalle: { tipo_alimentacion: tipoAlimentacionNormalizado, nombre_alumno: nombreAlumno, es_beneficiario: esBeneficiario },
+      ip: getClientIp(req)
+    });
     res.json({ message: 'Registrado', registro: result.rows[0] });
   } catch (err) {
     console.error(err.message);
@@ -1756,6 +1818,7 @@ app.post('/api/admin/beneficiarios/import', verifyToken, verifyRole(['admin', 'a
       warnings: summary.warnings.length,
       errors: summary.errors.length
     });
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'IMPORTACION_BENEFICIARIOS', detalle: { total: summary.total, insertados: summary.beneficiarios_insertados, actualizados: summary.beneficiarios_actualizados, colaciones: summary.colaciones_insertadas, errores: summary.errors.length }, ip: getClientIp(req) });
     res.json(summary);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1897,6 +1960,7 @@ app.post('/api/admin/beneficiarios/import-pae', verifyToken, verifyRole(['admin'
       warnings: summary.warnings.length,
       errors: summary.errors.length
     });
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'IMPORTACION_PAE', detalle: { total: summary.total, insertados: summary.beneficiarios_insertados, actualizados: summary.beneficiarios_actualizados, errores: summary.errors.length }, ip: getClientIp(req) });
     res.json(summary);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -2396,6 +2460,7 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
     }
 
     await client.query('COMMIT');
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'IMPORTACION_ALUMNOS', detalle: { total: summary.total, insertados: summary.inserted, actualizados: summary.updated, sin_cambios: summary.unchanged, errores: summary.errors.length }, ip: getClientIp(req) });
     res.json(summary);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -2503,6 +2568,7 @@ app.post('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, 
       'INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, $3) RETURNING id, correo, rol, fecha_creacion',
       [correo.trim().toLowerCase(), hash, rol]
     );
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'USUARIO_CREADO', entidad: 'usuario', entidad_id: result.rows[0].id, detalle: { correo: result.rows[0].correo, rol: result.rows[0].rol }, ip: getClientIp(req) });
     res.status(201).json({ message: 'Usuario creado.', usuario: result.rows[0] });
   } catch (err) {
     console.error(err.message);
@@ -2559,6 +2625,11 @@ app.put('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (re
       `UPDATE usuarios SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, correo, rol, fecha_creacion`,
       values
     );
+    const cambiados = {};
+    if (correo) cambiados.correo_nuevo = correo.trim().toLowerCase();
+    if (rol) cambiados.rol_nuevo = rol;
+    if (password) cambiados.password_cambiada = true;
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'USUARIO_EDITADO', entidad: 'usuario', entidad_id: parseInt(id, 10), detalle: cambiados, ip: getClientIp(req) });
     res.json({ message: 'Usuario actualizado.', usuario: result.rows[0] });
   } catch (err) {
     console.error(err.message);
@@ -2579,6 +2650,7 @@ app.delete('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'USUARIO_ELIMINADO', entidad: 'usuario', entidad_id: parseInt(id, 10), detalle: { correo: result.rows[0].correo }, ip: getClientIp(req) });
     res.json({ message: `Usuario ${result.rows[0].correo} eliminado.` });
   } catch (err) {
     console.error(err.message);
@@ -2586,10 +2658,49 @@ app.delete('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async 
   }
 });
 
+// === AUDITORÍA (solo admin) ===
+app.get('/api/admin/audit-log', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const { accion, usuario_correo, desde, hasta, page = '1', limit = '20' } = req.query;
+
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const offset = (pageNum - 1) * limitNum;
+
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+
+  if (accion)          { conditions.push(`accion = $${idx++}`);                          params.push(accion.trim()); }
+  if (usuario_correo)  { conditions.push(`usuario_correo ILIKE $${idx++}`);              params.push(`%${usuario_correo.trim()}%`); }
+  if (desde)           { conditions.push(`fecha >= $${idx++}`);                          params.push(desde); }
+  if (hasta)           { conditions.push(`fecha < ($${idx++}::date + interval '1 day')`); params.push(hasta); }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  try {
+    const countRes = await pool.query(`SELECT COUNT(*) FROM audit_log ${whereClause}`, params);
+    const total = parseInt(countRes.rows[0].count, 10);
+
+    const dataRes = await pool.query(
+      `SELECT id, usuario_id, usuario_correo, accion, entidad, entidad_id, detalle, ip, fecha
+       FROM audit_log ${whereClause}
+       ORDER BY fecha DESC
+       LIMIT $${idx++} OFFSET $${idx++}`,
+      [...params, limitNum, offset]
+    );
+
+    res.json({ total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, rows: dataRes.rows });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al obtener auditoría.' });
+  }
+});
+
 bootstrapBaseSchema()
   .then(() => ensureExcelDerivedTables())
   .then(() => ensureExcelSnapshotTable())
   .then(() => ensureUsuariosColumnas())
+  .then(() => ensureAuditLogTable())
   .then(() => ensureDefaultUsers())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

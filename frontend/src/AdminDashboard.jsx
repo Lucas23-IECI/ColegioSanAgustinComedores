@@ -7,7 +7,6 @@ import {
   ChevronDown, Download, RefreshCw, Clock, TrendingUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import HistoryPanel from './components/HistoryPanel';
 
 import { API_URL } from './config';
 
@@ -17,6 +16,8 @@ const REPORT_TYPES = [
   { id: 'desayuno', label: 'Solo Desayuno', desc: 'Solo registros de desayuno con marcas por día', icon: <Coffee size={18} /> },
   { id: 'no_beneficiarios', label: 'No Beneficiarios JUNAEB', desc: 'Alumnos sin beneficio que consumieron alimentos', icon: <ShieldAlert size={18} /> },
 ];
+
+const PAGE_SIZE = 5;
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -28,6 +29,8 @@ const AdminDashboard = () => {
   const [reportDesde, setReportDesde] = useState('');
   const [reportHasta, setReportHasta] = useState('');
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [registrosHoy, setRegistrosHoy] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const { logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -39,6 +42,7 @@ const AdminDashboard = () => {
     setReportDesde(firstDay);
     setReportHasta(today);
     fetchResumen();
+    fetchRegistrosHoy();
   }, []);
 
   const fetchResumen = async () => {
@@ -51,6 +55,19 @@ const AdminDashboard = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRegistrosHoy = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const res = await axios.get(`${API_URL}/lunches/history`, {
+        params: { from: today, to: today }
+      });
+      setRegistrosHoy(res.data);
+      setCurrentPage(1);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -244,7 +261,7 @@ const AdminDashboard = () => {
               <TrendingUp size={20} /> Resumen de Hoy
             </h3>
             <button 
-              onClick={fetchResumen} 
+              onClick={() => { fetchResumen(); fetchRegistrosHoy(); }}
               className="action-btn" 
               style={{ background: 'rgba(79,70,229,0.07)', color: 'var(--primary)', border: 'none' }}
               title="Recargar"
@@ -281,31 +298,72 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {/* Actividad Reciente */}
-              {recientes.length > 0 && (
-                <div className="recent-activity">
-                  <h4 style={{ color: 'var(--text-light)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Clock size={14} /> Últimos registros
+              {/* Registros de Hoy con paginación */}
+              <div className="recent-activity" style={{ marginTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ color: 'var(--text-light)', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={14} /> Registros de Hoy
                   </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {recientes.map(r => (
-                      <div key={r.id_registro} className="recent-item">
-                        <span style={{ fontWeight: 500, color: 'var(--text-dark)' }}>
-                          {r.nombres} {r.paterno}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className={`meal-badge ${(r.tipo_alimentacion || '').toLowerCase() === 'almuerzo' ? 'lunch' : 'breakfast'}`}>
-                            {(r.tipo_alimentacion || '').toString().trim().replace(/^./, (char) => char.toUpperCase())}
-                          </span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>
-                            {formatTime(r.hora_entrega)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>
+                    Total: {registrosHoy.length}
+                  </span>
                 </div>
-              )}
+                {registrosHoy.length === 0 ? (
+                  <p style={{ color: 'var(--text-light)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>
+                    Sin registros hoy.
+                  </p>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {registrosHoy
+                        .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+                        .map(r => (
+                          <div key={r.id_registro} className="recent-item">
+                            <div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.88rem' }}>
+                                {`${r.paterno}${r.materno ? ' ' + r.materno : ''}, ${r.nombres}`.toUpperCase()}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', marginTop: '2px' }}>
+                                {r.rut} &bull; {r.nombre_curso || 'S/C'}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                              <span className={`meal-badge ${(r.tipo_alimentacion || '').toLowerCase() === 'almuerzo' ? 'lunch' : 'breakfast'}`}>
+                                {(r.tipo_alimentacion || '').replace(/^./, c => c.toUpperCase())}
+                              </span>
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-light)' }}>
+                                {formatTime(r.hora_entrega)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                    {Math.ceil(registrosHoy.length / PAGE_SIZE) > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
+                        <button
+                          className="action-btn"
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          style={{ fontSize: '0.8rem', padding: '4px 14px' }}
+                        >
+                          ← Anterior
+                        </button>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text-light)' }}>
+                          Página {currentPage} de {Math.ceil(registrosHoy.length / PAGE_SIZE)}
+                        </span>
+                        <button
+                          className="action-btn"
+                          onClick={() => setCurrentPage(p => Math.min(Math.ceil(registrosHoy.length / PAGE_SIZE), p + 1))}
+                          disabled={currentPage === Math.ceil(registrosHoy.length / PAGE_SIZE)}
+                          style={{ fontSize: '0.8rem', padding: '4px 14px' }}
+                        >
+                          Siguiente →
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -425,15 +483,6 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '1.5rem 0' }} />
-
-        {/* ===== SECCIÓN 3: HISTORIAL (existente) ===== */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{ color: 'var(--text-dark)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            Historial Completo de Registros
-          </h3>
-          <HistoryPanel />
-        </div>
 
       </div>
     </div>

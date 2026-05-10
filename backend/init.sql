@@ -186,7 +186,8 @@ CREATE TABLE usuarios (
   id SERIAL PRIMARY KEY,
   correo VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  rol VARCHAR(20) NOT NULL -- 'admin' o 'lector'
+  rol VARCHAR(20) NOT NULL, -- 'admin', 'lector', 'asistente_social'
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE beneficiario_alimentacion (

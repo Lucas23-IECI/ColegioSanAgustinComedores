@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Utensils, Users, LogOut, ChevronRight, ShieldCheck, UserCog } from 'lucide-react';
+import { Utensils, Users, LogOut, ChevronRight, ShieldCheck, UserCog, ClipboardList } from 'lucide-react';
 import { AuthContext } from './context/AuthContext';
 
 const ALL_MODULES = [
@@ -42,6 +42,16 @@ const ALL_MODULES = [
     path: '/admin/usuarios',
     color: '#B45309',
     bg: 'rgba(180, 83, 9, 0.08)',
+    roles: ['admin'],
+  },
+  {
+    key: 'auditoria',
+    icon: ClipboardList,
+    title: 'Auditoría del Sistema',
+    description: 'Historial completo de acciones: logins, colaciones, importaciones y cambios de usuarios.',
+    path: '/admin/auditoria',
+    color: '#334155',
+    bg: 'rgba(51, 65, 85, 0.07)',
     roles: ['admin'],
   },
 ];

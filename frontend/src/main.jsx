@@ -10,6 +10,7 @@ import AdminDashboard from './AdminDashboard.jsx'
 import AdminHub from './AdminHub.jsx'
 import BeneficiariosAdmin from './BeneficiariosAdmin.jsx'
 import UsuariosAdmin from './UsuariosAdmin.jsx'
+import AuditoriaAdmin from './AuditoriaAdmin.jsx'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useContext(AuthContext);
@@ -49,6 +50,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/admin/beneficiarios" element={<ProtectedRoute allowedRoles={['admin', 'asistente_social']}><BeneficiariosAdmin /></ProtectedRoute>} />
           <Route path="/admin/estudiantes" element={<ProtectedRoute allowedRoles={['admin']}><Students /></ProtectedRoute>} />
           <Route path="/admin/usuarios" element={<ProtectedRoute allowedRoles={['admin']}><UsuariosAdmin /></ProtectedRoute>} />
+          <Route path="/admin/auditoria" element={<ProtectedRoute allowedRoles={['admin']}><AuditoriaAdmin /></ProtectedRoute>} />
           
         </Routes>
       </BrowserRouter>

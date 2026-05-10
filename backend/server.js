@@ -69,6 +69,12 @@ const ensureExcelSnapshotTable = async () => {
   `);
 };
 
+const ensureUsuariosColumnas = async () => {
+  await pool.query(`
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  `);
+};
+
 const ensureExcelDerivedTables = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS alumno_complemento (
@@ -2454,9 +2460,136 @@ app.get('/api/students/:id/details', verifyToken, verifyRole(['admin']), async (
   }
 });
 
+// === GESTIÓN DE USUARIOS (solo admin) ===
+
+// Listar todos los usuarios
+app.get('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, correo, rol, fecha_creacion FROM usuarios ORDER BY fecha_creacion ASC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al obtener usuarios.' });
+  }
+});
+
+// Crear usuario
+app.post('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const { correo, password, rol } = req.body;
+  const rolesValidos = ['admin', 'lector', 'asistente_social'];
+
+  if (!correo || !password || !rol) {
+    return res.status(400).json({ message: 'Correo, contraseña y rol son obligatorios.' });
+  }
+  if (!rolesValidos.includes(rol)) {
+    return res.status(400).json({ message: 'Rol inválido.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const existe = await pool.query('SELECT id FROM usuarios WHERE LOWER(correo) = LOWER($1)', [correo.trim()]);
+    if (existe.rows.length > 0) {
+      return res.status(409).json({ message: 'Ya existe un usuario con ese correo.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+
+    const result = await pool.query(
+      'INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, $3) RETURNING id, correo, rol, fecha_creacion',
+      [correo.trim().toLowerCase(), hash, rol]
+    );
+    res.status(201).json({ message: 'Usuario creado.', usuario: result.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al crear usuario.' });
+  }
+});
+
+// Editar usuario (correo, rol y/o contraseña)
+app.put('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const { id } = req.params;
+  const { correo, rol, password } = req.body;
+  const rolesValidos = ['admin', 'lector', 'asistente_social'];
+
+  if (rol && !rolesValidos.includes(rol)) {
+    return res.status(400).json({ message: 'Rol inválido.' });
+  }
+  if (password && password.length < 6) {
+    return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const userRes = await pool.query('SELECT id FROM usuarios WHERE id = $1', [id]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    // Verificar duplicado de correo si se cambia
+    if (correo) {
+      const dup = await pool.query('SELECT id FROM usuarios WHERE LOWER(correo) = LOWER($1) AND id != $2', [correo.trim(), id]);
+      if (dup.rows.length > 0) {
+        return res.status(409).json({ message: 'Ya existe un usuario con ese correo.' });
+      }
+    }
+
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (correo) { updates.push(`correo = $${idx++}`); values.push(correo.trim().toLowerCase()); }
+    if (rol)    { updates.push(`rol = $${idx++}`);    values.push(rol); }
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(password, salt);
+      updates.push(`password_hash = $${idx++}`);
+      values.push(hash);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ message: 'No hay campos para actualizar.' });
+    }
+
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE usuarios SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, correo, rol, fecha_creacion`,
+      values
+    );
+    res.json({ message: 'Usuario actualizado.', usuario: result.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al actualizar usuario.' });
+  }
+});
+
+// Eliminar usuario (no puede eliminarse a sí mismo)
+app.delete('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (req, res) => {
+  const { id } = req.params;
+
+  if (parseInt(id, 10) === req.user.id) {
+    return res.status(400).json({ message: 'No puedes eliminar tu propio usuario.' });
+  }
+
+  try {
+    const result = await pool.query('DELETE FROM usuarios WHERE id = $1 RETURNING id, correo', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    res.json({ message: `Usuario ${result.rows[0].correo} eliminado.` });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Error al eliminar usuario.' });
+  }
+});
+
 bootstrapBaseSchema()
   .then(() => ensureExcelDerivedTables())
   .then(() => ensureExcelSnapshotTable())
+  .then(() => ensureUsuariosColumnas())
   .then(() => ensureDefaultUsers())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

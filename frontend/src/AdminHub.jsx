@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Utensils, Users, LogOut, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Utensils, Users, LogOut, ChevronRight, ShieldCheck, UserCog } from 'lucide-react';
 import { AuthContext } from './context/AuthContext';
 
 const ALL_MODULES = [
@@ -32,6 +32,16 @@ const ALL_MODULES = [
     path: '/admin/estudiantes',
     color: '#7C3AED',
     bg: 'rgba(124, 58, 237, 0.08)',
+    roles: ['admin'],
+  },
+  {
+    key: 'usuarios',
+    icon: UserCog,
+    title: 'Gestión de Usuarios',
+    description: 'Crear, editar y eliminar cuentas de acceso. Solo administradores.',
+    path: '/admin/usuarios',
+    color: '#B45309',
+    bg: 'rgba(180, 83, 9, 0.08)',
     roles: ['admin'],
   },
 ];

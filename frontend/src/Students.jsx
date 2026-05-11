@@ -35,7 +35,7 @@ function Students() {
   const [pageSize, setPageSize] = useState(20);
   const [courseSearch, setCourseSearch] = useState('');
   const [coursePage, setCoursePage] = useState(1);
-  const COURSE_PAGE_SIZE = 12;
+  const COURSE_PAGE_SIZE = 9;
   const [filterEstado, setFilterEstado] = useState('');
   const [filterJunaeb, setFilterJunaeb] = useState('');
 
@@ -282,7 +282,7 @@ function Students() {
                const pagedCourses = allCourses.slice((coursePage - 1) * COURSE_PAGE_SIZE, coursePage * COURSE_PAGE_SIZE);
                return (
                  <>
-                   <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px'}}>
+                   <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px'}}>
                      <div 
                        className="registration-card"
                        style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'rgba(59, 130, 246, 0.05)'}}

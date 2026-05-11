@@ -65,7 +65,9 @@ const AuditRow = ({ row }) => {
           {formatFecha(row.fecha)}
         </td>
         <td style={{ padding: '10px 12px', fontSize: '0.82rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {row.usuario_correo || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>anónimo</span>}
+          {row.usuario_nombre
+            ? <><span style={{ display: 'block', fontWeight: 600, color: '#1e293b' }}>{row.usuario_nombre}</span><span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{row.usuario_correo}</span></>
+            : row.usuario_correo || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>anónimo</span>}
         </td>
         <td style={{ padding: '10px 12px' }}>
           <span style={badgeStyle(row.accion)}>{row.accion}</span>
@@ -262,8 +264,8 @@ const AuditoriaAdmin = () => {
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>Usuario (correo)</label>
-            <input value={filtroCorreo} onChange={e => setFiltroCorreo(e.target.value)} placeholder="ej: admin@colegio.cl" style={{ ...inputStyle, width: 190 }} />
+            <label style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>Usuario</label>
+            <input value={filtroCorreo} onChange={e => setFiltroCorreo(e.target.value)} placeholder="Buscar por correo" style={{ ...inputStyle, width: 190 }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>Desde</label>

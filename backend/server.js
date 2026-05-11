@@ -2676,21 +2676,27 @@ app.get('/api/admin/audit-log', verifyToken, verifyRole(['admin']), async (req, 
   const params = [];
   let idx = 1;
 
-  if (accion)          { conditions.push(`accion = $${idx++}`);                          params.push(accion.trim()); }
-  if (usuario_correo)  { conditions.push(`usuario_correo ILIKE $${idx++}`);              params.push(`%${usuario_correo.trim()}%`); }
-  if (desde)           { conditions.push(`fecha >= $${idx++}`);                          params.push(desde); }
-  if (hasta)           { conditions.push(`fecha < ($${idx++}::date + interval '1 day')`); params.push(hasta); }
+  if (accion)          { conditions.push(`a.accion = $${idx++}`);                          params.push(accion.trim()); }
+  if (usuario_correo)  { conditions.push(`a.usuario_correo ILIKE $${idx++}`);              params.push(`%${usuario_correo.trim()}%`); }
+  if (desde)           { conditions.push(`a.fecha >= $${idx++}`);                          params.push(desde); }
+  if (hasta)           { conditions.push(`a.fecha < ($${idx++}::date + interval '1 day')`); params.push(hasta); }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   try {
-    const countRes = await pool.query(`SELECT COUNT(*) FROM audit_log ${whereClause}`, params);
+    const countRes = await pool.query(
+      `SELECT COUNT(*) FROM audit_log a ${whereClause}`,
+      params
+    );
     const total = parseInt(countRes.rows[0].count, 10);
 
     const dataRes = await pool.query(
-      `SELECT id, usuario_id, usuario_correo, accion, entidad, entidad_id, detalle, ip, fecha
-       FROM audit_log ${whereClause}
-       ORDER BY fecha DESC
+      `SELECT a.id, a.usuario_id, a.usuario_correo, u.nombre AS usuario_nombre,
+              a.accion, a.entidad, a.entidad_id, a.detalle, a.ip, a.fecha
+       FROM audit_log a
+       LEFT JOIN usuarios u ON u.id = a.usuario_id
+       ${whereClause}
+       ORDER BY a.fecha DESC
        LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limitNum, offset]
     );

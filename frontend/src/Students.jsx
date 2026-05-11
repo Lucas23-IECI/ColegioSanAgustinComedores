@@ -278,11 +278,15 @@ function Students() {
              </div>
              {(() => {
                const allCourses = Object.keys(courseGroups).sort().filter(c => c.toLowerCase().includes(courseSearch.toLowerCase()));
-               const totalCoursePages = Math.ceil(allCourses.length / COURSE_PAGE_SIZE);
-               const pagedCourses = allCourses.slice((coursePage - 1) * COURSE_PAGE_SIZE, coursePage * COURSE_PAGE_SIZE);
+               // El card "Todos" ocupa un slot en página 1, así que la primera página tiene COURSE_PAGE_SIZE-1 cursos
+               const totalCoursePages = Math.ceil((allCourses.length + 1) / COURSE_PAGE_SIZE);
+               const pagedCourses = coursePage === 1
+                 ? allCourses.slice(0, COURSE_PAGE_SIZE - 1)
+                 : allCourses.slice((coursePage - 1) * COURSE_PAGE_SIZE - 1, coursePage * COURSE_PAGE_SIZE - 1);
                return (
                  <>
                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px'}}>
+                     {coursePage === 1 && (
                      <div 
                        className="registration-card"
                        style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'rgba(59, 130, 246, 0.05)'}}
@@ -292,6 +296,7 @@ function Students() {
                        <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>Todos los Alumnos</h3>
                        <p style={{color: 'var(--text-light)', margin: 0}}>Padrón Global ({students.length})</p>
                      </div>
+                     )}
 
                      {pagedCourses.map(curso => (
                       <div 

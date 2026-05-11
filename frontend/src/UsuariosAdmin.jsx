@@ -17,7 +17,7 @@ const ROL_BADGE = {
   lector: { label: 'Lector', color: '#B45309', bg: 'rgba(180,83,9,0.1)' },
 };
 
-const emptyForm = { correo: '', password: '', rol: 'lector' };
+const emptyForm = { nombre: '', correo: '', password: '', rol: 'lector' };
 
 const UsuariosAdmin = () => {
   const { user, logout } = useContext(AuthContext);
@@ -58,7 +58,7 @@ const UsuariosAdmin = () => {
   };
 
   const openEditar = (u) => {
-    setForm({ correo: u.correo, password: '', rol: u.rol });
+    setForm({ nombre: u.nombre || '', correo: u.correo, password: '', rol: u.rol });
     setFormError('');
     setFormMode(u.id);
   };
@@ -76,7 +76,7 @@ const UsuariosAdmin = () => {
       if (formMode === 'crear') {
         await axios.post(`${API_URL}/admin/usuarios`, form, { withCredentials: true });
       } else {
-        const payload = { correo: form.correo, rol: form.rol };
+        const payload = { correo: form.correo, rol: form.rol, nombre: form.nombre };
         if (form.password) payload.password = form.password;
         await axios.put(`${API_URL}/admin/usuarios/${formMode}`, payload, { withCredentials: true });
       }
@@ -104,14 +104,25 @@ const UsuariosAdmin = () => {
   const labelStyle = { fontSize: '0.75rem', color: '#6B7280', fontWeight: 700, display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' };
   const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(0,0,0,0.12)', fontSize: '0.88rem', boxSizing: 'border-box', outline: 'none', transition: 'border-color 0.15s' };
 
-  const getInitials = (correo) => correo.slice(0, 2).toUpperCase();
+  const getInitials = (u) => {
+    if (u.nombre && u.nombre.trim()) {
+      const parts = u.nombre.trim().split(' ');
+      return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+    }
+    return u.correo.slice(0, 2).toUpperCase();
+  };
 
   const COL = '1fr 130px 110px 190px';
 
   const FormPanel = () => (
     <div style={{ background: 'rgba(79,70,229,0.04)', border: '1.5px solid rgba(79,70,229,0.2)', borderRadius: '12px', padding: '1.2rem 1.4rem', margin: '0 0 2px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', alignItems: 'end' }}>
-        <div style={{ gridColumn: '1 / -1' }}>
+        <div>
+          <label style={labelStyle}>Nombre <span style={{ fontWeight: 400, opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span></label>
+          <input type="text" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: María González" style={inputStyle}
+            onFocus={e => e.target.style.borderColor = '#4F46E5'} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.12)'} />
+        </div>
+        <div style={{ gridColumn: '2 / -1' }}>
           <label style={labelStyle}>Correo electrónico</label>
           <input type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value }))} placeholder="usuario@colegio.cl" style={inputStyle}
             onFocus={e => e.target.style.borderColor = '#4F46E5'} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.12)'} />
@@ -215,12 +226,15 @@ const UsuariosAdmin = () => {
                     {/* Usuario */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                       <div style={{ width: 34, height: 34, borderRadius: '9px', flexShrink: 0, background: badge.bg, color: badge.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem' }}>
-                        {getInitials(u.correo)}
+                        {getInitials(u)}
                       </div>
-                      <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.87rem', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {u.correo}
-                        {esMiUsuario && <span style={{ fontSize: '0.67rem', background: 'rgba(79,70,229,0.12)', color: '#4F46E5', borderRadius: '20px', padding: '1px 7px', fontWeight: 600, flexShrink: 0 }}>tú</span>}
-                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.87rem', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {u.nombre || u.correo}
+                          {esMiUsuario && <span style={{ fontSize: '0.67rem', background: 'rgba(79,70,229,0.12)', color: '#4F46E5', borderRadius: '20px', padding: '1px 7px', fontWeight: 600, flexShrink: 0 }}>tú</span>}
+                        </span>
+                        {u.nombre && <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{u.correo}</span>}
+                      </div>
                     </div>
 
                     {/* Rol */}

@@ -17,7 +17,7 @@ const REPORT_TYPES = [
   { id: 'no_beneficiarios', label: 'No Beneficiarios JUNAEB', desc: 'Alumnos sin beneficio que consumieron alimentos', icon: <ShieldAlert size={18} /> },
 ];
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);

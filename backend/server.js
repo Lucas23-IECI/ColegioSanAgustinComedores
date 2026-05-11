@@ -73,6 +73,9 @@ const ensureUsuariosColumnas = async () => {
   await pool.query(`
     ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
+  await pool.query(`
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nombre VARCHAR(100)
+  `);
 };
 
 const ensureAuditLogTable = async () => {
@@ -1108,7 +1111,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, correo: user.correo, rol: user.rol }, 
+      { id: user.id, correo: user.correo, nombre: user.nombre || null, rol: user.rol }, 
       JWT_SECRET, 
       { expiresIn: '8h' }
     );
@@ -1122,7 +1125,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     registrarAudit({ usuario_id: user.id, usuario_correo: user.correo, accion: 'LOGIN_EXITOSO', detalle: { rol: user.rol }, ip: getClientIp(req) });
-    res.json({ user: { id: user.id, correo: user.correo, rol: user.rol } });
+    res.json({ user: { id: user.id, correo: user.correo, nombre: user.nombre || null, rol: user.rol } });
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Error del servidor');
@@ -2531,7 +2534,7 @@ app.get('/api/students/:id/details', verifyToken, verifyRole(['admin']), async (
 app.get('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, correo, rol, fecha_creacion FROM usuarios ORDER BY fecha_creacion ASC'
+      'SELECT id, correo, nombre, rol, fecha_creacion FROM usuarios ORDER BY fecha_creacion ASC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -2542,7 +2545,7 @@ app.get('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, r
 
 // Crear usuario
 app.post('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, res) => {
-  const { correo, password, rol } = req.body;
+  const { correo, password, rol, nombre } = req.body;
   const rolesValidos = ['admin', 'lector', 'asistente_social'];
 
   if (!correo || !password || !rol) {
@@ -2564,11 +2567,12 @@ app.post('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
+    const nombreLimpio = nombre ? nombre.trim() : null;
     const result = await pool.query(
-      'INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, $3) RETURNING id, correo, rol, fecha_creacion',
-      [correo.trim().toLowerCase(), hash, rol]
+      'INSERT INTO usuarios (correo, password_hash, rol, nombre) VALUES ($1, $2, $3, $4) RETURNING id, correo, nombre, rol, fecha_creacion',
+      [correo.trim().toLowerCase(), hash, rol, nombreLimpio]
     );
-    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'USUARIO_CREADO', entidad: 'usuario', entidad_id: result.rows[0].id, detalle: { correo: result.rows[0].correo, rol: result.rows[0].rol }, ip: getClientIp(req) });
+    registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'USUARIO_CREADO', entidad: 'usuario', entidad_id: result.rows[0].id, detalle: { correo: result.rows[0].correo, nombre: result.rows[0].nombre, rol: result.rows[0].rol }, ip: getClientIp(req) });
     res.status(201).json({ message: 'Usuario creado.', usuario: result.rows[0] });
   } catch (err) {
     console.error(err.message);
@@ -2579,7 +2583,7 @@ app.post('/api/admin/usuarios', verifyToken, verifyRole(['admin']), async (req, 
 // Editar usuario (correo, rol y/o contraseña)
 app.put('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (req, res) => {
   const { id } = req.params;
-  const { correo, rol, password } = req.body;
+  const { correo, rol, password, nombre } = req.body;
   const rolesValidos = ['admin', 'lector', 'asistente_social'];
 
   if (rol && !rolesValidos.includes(rol)) {
@@ -2609,6 +2613,7 @@ app.put('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (re
 
     if (correo) { updates.push(`correo = $${idx++}`); values.push(correo.trim().toLowerCase()); }
     if (rol)    { updates.push(`rol = $${idx++}`);    values.push(rol); }
+    if (nombre !== undefined) { updates.push(`nombre = $${idx++}`); values.push(nombre ? nombre.trim() : null); }
     if (password) {
       const salt = await bcrypt.genSalt(10);
       const hash = await bcrypt.hash(password, salt);
@@ -2622,12 +2627,13 @@ app.put('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (re
 
     values.push(id);
     const result = await pool.query(
-      `UPDATE usuarios SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, correo, rol, fecha_creacion`,
+      `UPDATE usuarios SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, correo, nombre, rol, fecha_creacion`,
       values
     );
     const cambiados = {};
     if (correo) cambiados.correo_nuevo = correo.trim().toLowerCase();
     if (rol) cambiados.rol_nuevo = rol;
+    if (nombre !== undefined) cambiados.nombre_nuevo = nombre ? nombre.trim() : null;
     if (password) cambiados.password_cambiada = true;
     registrarAudit({ usuario_id: req.user.id, usuario_correo: req.user.correo, accion: 'USUARIO_EDITADO', entidad: 'usuario', entidad_id: parseInt(id, 10), detalle: cambiados, ip: getClientIp(req) });
     res.json({ message: 'Usuario actualizado.', usuario: result.rows[0] });

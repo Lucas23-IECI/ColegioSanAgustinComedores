@@ -34,6 +34,8 @@ function Students() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [courseSearch, setCourseSearch] = useState('');
+  const [coursePage, setCoursePage] = useState(1);
+  const COURSE_PAGE_SIZE = 12;
   const [filterEstado, setFilterEstado] = useState('');
   const [filterJunaeb, setFilterJunaeb] = useState('');
 
@@ -58,6 +60,10 @@ function Students() {
   useEffect(() => {
     setPage(1);
   }, [selectedCourse, searchTerm, filterEstado, filterJunaeb]);
+
+  useEffect(() => {
+    setCoursePage(1);
+  }, [courseSearch]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -270,32 +276,46 @@ function Students() {
                  />
                </div>
              </div>
-             <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px'}}>
-                <div 
-                  className="registration-card"
-                  style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'rgba(59, 130, 246, 0.05)'}}
-                  onClick={() => setSelectedCourse('Toda La Matrícula')}
-                >
-                  <Users size={32} color="#3b82f6" style={{marginBottom: '10px'}}/>
-                  <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>Todos los Alumnos</h3>
-                  <p style={{color: 'var(--text-light)', margin: 0}}>Padrón Global ({students.length})</p>
-                </div>
+             {(() => {
+               const allCourses = Object.keys(courseGroups).sort().filter(c => c.toLowerCase().includes(courseSearch.toLowerCase()));
+               const totalCoursePages = Math.ceil(allCourses.length / COURSE_PAGE_SIZE);
+               const pagedCourses = allCourses.slice((coursePage - 1) * COURSE_PAGE_SIZE, coursePage * COURSE_PAGE_SIZE);
+               return (
+                 <>
+                   <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px'}}>
+                     <div 
+                       className="registration-card"
+                       style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'rgba(59, 130, 246, 0.05)'}}
+                       onClick={() => setSelectedCourse('Toda La Matrícula')}
+                     >
+                       <Users size={32} color="#3b82f6" style={{marginBottom: '10px'}}/>
+                       <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>Todos los Alumnos</h3>
+                       <p style={{color: 'var(--text-light)', margin: 0}}>Padrón Global ({students.length})</p>
+                     </div>
 
-                {Object.keys(courseGroups).sort()
-                  .filter(c => c.toLowerCase().includes(courseSearch.toLowerCase()))
-                  .map(curso => (
-                   <div 
-                     key={curso} 
-                     className="registration-card"
-                     style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'white'}}
-                     onClick={() => setSelectedCourse(curso)}
-                   >
-                     <GraduationCap size={32} color="var(--primary)" style={{marginBottom: '10px'}}/>
-                     <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>{curso}</h3>
-                     <p style={{color: 'var(--text-light)', margin: 0}}>{courseGroups[curso].length} Alumnos</p>
+                     {pagedCourses.map(curso => (
+                      <div 
+                        key={curso} 
+                        className="registration-card"
+                        style={{padding: '20px', cursor: 'pointer', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', background: 'white'}}
+                        onClick={() => setSelectedCourse(curso)}
+                      >
+                        <GraduationCap size={32} color="var(--primary)" style={{marginBottom: '10px'}}/>
+                        <h3 style={{color: 'var(--text-dark)', margin: '0 0 5px 0'}}>{curso}</h3>
+                        <p style={{color: 'var(--text-light)', margin: 0}}>{courseGroups[curso].length} Alumnos</p>
+                      </div>
+                     ))}
                    </div>
-                ))}
-             </div>
+                   {totalCoursePages > 1 && (
+                     <div className="pagination" style={{marginTop: '20px'}}>
+                       <button className="pagination-btn" disabled={coursePage === 1} onClick={() => setCoursePage(p => p - 1)}>← Anterior</button>
+                       <span className="pagination-info">Página {coursePage} de {totalCoursePages} · {allCourses.length} cursos</span>
+                       <button className="pagination-btn" disabled={coursePage === totalCoursePages} onClick={() => setCoursePage(p => p + 1)}>Siguiente →</button>
+                     </div>
+                   )}
+                 </>
+               );
+             })()}
           </div>
         ) : activeSection === 'listado' ? (
           <div className="fade-in">

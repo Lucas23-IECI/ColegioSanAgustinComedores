@@ -26,6 +26,8 @@ const UsuariosAdmin = () => {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [usuPage, setUsuPage] = useState(1);
+  const USU_PAGE_SIZE = 10;
 
   // Formulario: null = cerrado, 'crear' | id = modo
   const [formMode, setFormMode] = useState(null);
@@ -81,6 +83,7 @@ const UsuariosAdmin = () => {
         await axios.put(`${API_URL}/admin/usuarios/${formMode}`, payload, { withCredentials: true });
       }
       closeForm();
+      setUsuPage(1);
       fetchUsuarios();
     } catch (err) {
       setFormError(err.response?.data?.message || 'Error al guardar.');
@@ -93,6 +96,7 @@ const UsuariosAdmin = () => {
     try {
       await axios.delete(`${API_URL}/admin/usuarios/${id}`, { withCredentials: true });
       setConfirmDelete(null);
+      setUsuPage(1);
       fetchUsuarios();
     } catch (err) {
       alert(err.response?.data?.message || 'Error al eliminar.');
@@ -205,12 +209,13 @@ const UsuariosAdmin = () => {
             </div>
 
             {/* Filas */}
-            {usuarios.map((u, idx) => {
+            {usuarios.slice((usuPage - 1) * USU_PAGE_SIZE, usuPage * USU_PAGE_SIZE).map((u, idx) => {
               const badge = ROL_BADGE[u.rol] || { label: u.rol, color: '#666', bg: '#eee' };
               const esMiUsuario = u.id === user?.id;
               const confirmando = confirmDelete === u.id;
               const editando = formMode === u.id;
-              const isLast = idx === usuarios.length - 1;
+              const pagedList = usuarios.slice((usuPage - 1) * USU_PAGE_SIZE, usuPage * USU_PAGE_SIZE);
+              const isLast = idx === pagedList.length - 1;
 
               return (
                 <React.Fragment key={u.id}>
@@ -283,6 +288,26 @@ const UsuariosAdmin = () => {
             })}
           </div>
         )}
+
+        {/* Paginación */}
+        {!loading && !error && usuarios.length > USU_PAGE_SIZE && (() => {
+          const totalPages = Math.ceil(usuarios.length / USU_PAGE_SIZE);
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '14px' }}>
+              <button
+                onClick={() => setUsuPage(p => p - 1)} disabled={usuPage === 1}
+                style={{ background: usuPage === 1 ? 'rgba(0,0,0,0.04)' : 'rgba(79,70,229,0.1)', color: usuPage === 1 ? '#9CA3AF' : '#4F46E5', border: 'none', borderRadius: '8px', padding: '7px 14px', fontWeight: 600, fontSize: '0.82rem', cursor: usuPage === 1 ? 'not-allowed' : 'pointer' }}>
+                ← Anterior
+              </button>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-light)', fontWeight: 500 }}>Página {usuPage} de {totalPages}</span>
+              <button
+                onClick={() => setUsuPage(p => p + 1)} disabled={usuPage === totalPages}
+                style={{ background: usuPage === totalPages ? 'rgba(0,0,0,0.04)' : 'rgba(79,70,229,0.1)', color: usuPage === totalPages ? '#9CA3AF' : '#4F46E5', border: 'none', borderRadius: '8px', padding: '7px 14px', fontWeight: 600, fontSize: '0.82rem', cursor: usuPage === totalPages ? 'not-allowed' : 'pointer' }}>
+                Siguiente →
+              </button>
+            </div>
+          );
+        })()}
 
       </div>
     </div>

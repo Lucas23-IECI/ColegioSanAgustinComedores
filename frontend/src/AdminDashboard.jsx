@@ -37,8 +37,9 @@ const AdminDashboard = () => {
   useEffect(() => {
     // Defaults para este mes
     const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const today = now.toISOString().split('T')[0];
+    const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const firstDay = localDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    const today = localDate(now);
     setReportDesde(firstDay);
     setReportHasta(today);
     fetchResumen();
@@ -60,7 +61,8 @@ const AdminDashboard = () => {
 
   const fetchRegistrosHoy = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const res = await axios.get(`${API_URL}/lunches/history`, {
         params: { from: today, to: today }
       });

@@ -1225,7 +1225,7 @@ app.get('/api/students/scan/:barcode', verifyToken, verifyRole(['lector', 'admin
       FROM alumno a
       LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
       LEFT JOIN curso c ON m.id_curso = c.id_curso
-      WHERE LOWER(a.codigo_barra) = LOWER($1)
+      WHERE a.rut = $1
         OR LOWER(a.tne_codigo_barra) = LOWER($1)
     `;
     const resultAlumno = await pool.query(queryAlumno, [barcode]);

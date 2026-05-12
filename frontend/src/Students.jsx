@@ -532,7 +532,7 @@ function Students() {
                     <p style={{color: 'var(--text-light)', marginBottom: '25px', display: 'flex', flexWrap:'wrap', gap:'15px'}}>
                       <span>RUT: {studentDetails.alumno.rut}-{studentDetails.alumno.dv}</span>
                       <span>| Curso: {studentDetails.alumno.grado || 'S/C'}</span>
-                      <span>| Escáner ID: <strong style={{color:'var(--text-dark)'}}>{studentDetails.alumno.codigo_barra}</strong></span>
+                      <span>| TNE: <strong style={{color:'var(--text-dark)'}}>{studentDetails.alumno.tne_codigo_barra || 'N/D'}</strong></span>
                     </p>
 
                     <div style={{background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px'}}>

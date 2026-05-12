@@ -531,7 +531,7 @@ const BarcodeScanner = () => {
             ref={inputRef}
             type="text"
             className="kiosk-input"
-            placeholder={scannerActive ? 'Esperando escaneo...' : 'RUT o nombre del alumno...'}
+            placeholder={scannerActive ? 'Esperando escaneo de tarjeta...' : 'RUT o nombre del alumno...'}
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}

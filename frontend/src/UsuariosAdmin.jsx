@@ -163,9 +163,7 @@ const UsuariosAdmin = () => {
         {/* Header */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '12px', background: 'rgba(79,70,229,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <UserCog size={22} color="#4F46E5" />
-            </div>
+            <img src="/CSAC-logo_simple.png" alt="Colegio San Agustín" style={{ maxHeight: '44px', width: 'auto', flexShrink: 0 }} />
             <div>
               <h2 style={{ color: 'var(--text-dark)', fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Gestión de Usuarios</h2>
               <p style={{ color: 'var(--text-light)', fontSize: '0.8rem', marginTop: '2px' }}>Crear, editar y eliminar cuentas de acceso al sistema.</p>

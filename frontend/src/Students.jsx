@@ -229,6 +229,7 @@ function Students() {
               >
                 <ChevronLeft size={20} />
               </button>
+              <img src="/CSAC-logo_simple.png" alt="Colegio San Agustín" style={{ maxHeight: '40px', width: 'auto', flexShrink: 0 }} />
               <h1 className="students-title">
                  {activeSection === 'listado'
                    ? (selectedCourse ? `Alumnos: ${selectedCourse}` : 'Listado de Cursos')

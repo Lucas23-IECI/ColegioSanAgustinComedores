@@ -237,6 +237,7 @@ const AuditoriaAdmin = () => {
             <button style={btnSecondary} onClick={() => navigate('/admin')}>
               <ArrowLeft size={15} /> Volver
             </button>
+            <img src="/CSAC-logo_simple.png" alt="Colegio San Agustín" style={{ maxHeight: '40px', width: 'auto', flexShrink: 0, filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
             <div>
               <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Auditoría del Sistema</h1>
               <p style={{ margin: 0, fontSize: '0.82rem', opacity: 0.7, marginTop: 2 }}>

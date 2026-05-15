@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
-import { Utensils, AlertCircle, Mail, Lock } from 'lucide-react';
+import { AlertCircle, Mail, Lock } from 'lucide-react';
 import './index.css';
 
 const Login = () => {
@@ -34,12 +34,19 @@ const Login = () => {
   return (
     <div className="login-page">
       <div className="login-card">
+        {/* Hero logo — full width */}
+        <div className="login-hero">
+          <img
+            src="/CSAC-logo.png"
+            alt="Logo Colegio San Agustín"
+            className="login-hero-logo"
+          />
+        </div>
+
         <div className="login-header">
-          <div className="login-icon">
-            <Utensils size={32} />
-          </div>
-          <h1 className="login-title">Sistema de Colaciones</h1>
-          <p className="login-subtitle">Colegio San Agustín</p>
+          <h1 className="login-title">Sistema de Gestión de</h1>
+          <h2 className="login-title-accent">Interno</h2>
+
         </div>
 
         {errorMsg && (

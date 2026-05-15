@@ -235,13 +235,16 @@ const AdminDashboard = () => {
         
         {/* Header */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <div>
-            <h2 style={{ color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <UtensilsCrossed /> Módulo Alimentación
-            </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img src="/CSAC-logo_simple.png" alt="Colegio San Agustín" style={{ maxHeight: '44px', width: 'auto', flexShrink: 0 }} />
+            <div>
+              <h2 style={{ color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <UtensilsCrossed /> Módulo Alimentación
+              </h2>
             <p style={{ color: 'var(--text-light)', fontSize: '0.85rem', marginTop: '4px' }}>
               Resumen del día y generación de reportes
             </p>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button onClick={() => navigate('/admin/beneficiarios')} className="action-btn" style={{ backgroundColor: 'rgba(5, 150, 105, 0.1)', border: '1px solid rgba(5, 150, 105, 0.2)', color: '#059669' }}>

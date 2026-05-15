@@ -51,6 +51,12 @@ function App() {
         
           <header className="kiosk-header">
             <div className="kiosk-title-group">
+              <img 
+                src="/CSAC-logo_simple.png" 
+                alt="Colegio San Agustín" 
+                className="kiosk-logo"
+              />
+              <div className="kiosk-divider" />
               <MealIcon size={36} strokeWidth={2.2} />
               <div>
                 <h1>{mealType}</h1>

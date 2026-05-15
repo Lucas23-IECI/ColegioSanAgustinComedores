@@ -636,6 +636,7 @@ const BeneficiariosAdmin = () => {
             <button className="students-back-btn" onClick={() => navigate('/admin')}>
               <ArrowLeft size={20} />
             </button>
+            <img src="/CSAC-logo_simple.png" alt="Colegio San Agustín" style={{ maxHeight: '40px', width: 'auto', flexShrink: 0 }} />
             <div>
               <h1 className="students-title">Beneficiarios de Alimentación</h1>
               <p style={{ color: 'var(--text-light)', marginTop: '4px', fontSize: '0.88rem' }}>

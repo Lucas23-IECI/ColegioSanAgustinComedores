@@ -71,11 +71,18 @@ const AdminHub = () => {
     <div className="hub-page">
       <div className="hub-card">
         <header className="hub-header">
-          <div>
-            <h1 className="hub-title">Hub Administrativo</h1>
-            <p className="hub-welcome">
-              Bienvenido, <strong>{user?.correo}</strong>
-            </p>
+          <div className="hub-header-left">
+            <img 
+              src="/CSAC-logo_simple.png" 
+              alt="Colegio San Agustín" 
+              className="hub-logo-small"
+            />
+            <div>
+              <h1 className="hub-title">Hub Administrativo</h1>
+              <p className="hub-welcome">
+                Bienvenido, <strong>{user?.correo}</strong>
+              </p>
+            </div>
           </div>
         </header>
 

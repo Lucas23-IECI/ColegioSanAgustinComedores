@@ -54,5 +54,35 @@ Vista pública estándar de formulario que procesa el ingreso inicial y se comun
 - Si las credenciales fallan, avisa con un banner visual sin detener el componente.
 
 ### `AdminDashboard.jsx`
-Panel (WIP) pensado para la _Asistente Social / Directiva_.
-- Renderizado solo si en las rutas detecta un `req.user.rol === 'admin'`. Muestra inmediatamente el cruce estadístico pidiendo a base de datos la cuenta total de los almuerzos registrados en niños marcados como `No Beneficiario` (y que sus colaciones se permitieron bajo la etiqueta `es_beneficiario_al_momento = false`). 
+Panel de reportería general y visualización gráfica para la Directora, Encargados de Casino y Asistente Social.
+- Presenta estadísticas clave del día actual y de rangos históricos.
+- Genera visualizaciones y cruces estadísticos de raciones entregadas (beneficiarios vs. no beneficiarios).
+- Permite descargar la planilla consolidada en formato Excel (XLSX).
+
+### `AdminHub.jsx`
+Menú central de navegación rápida para administradores y asistentes sociales.
+- Enruta al administrador hacia los distintos módulos de gestión especializada: Alumnos, Beneficiarios, Usuarios, Auditoría del Sistema y Panel de Control (Kiosco).
+- Valida accesos y roles a nivel visual.
+
+### `Students.jsx`
+Ficha y listado general de estudiantes para operaciones de secretaría escolar.
+- Permite la visualización de cursos, matrículas y búsqueda inteligente de perfiles de alumnos.
+- Permite realizar ediciones manuales de datos personales, contactos de emergencia y asignación de restricciones dietarias.
+- Integra el disparador del proceso bulk-sync para actualizar masivamente a la comunidad escolar desde el Excel del software SAP FullCollege.
+
+### `BeneficiariosAdmin.jsx`
+Panel especializado para la asistente social Carolina Salinas.
+- Administra de forma manual o masiva el estado de becas JUNAEB/PAE.
+- Implementa importaciones de archivos Excel con opciones para generar marcas de colaciones de forma retroactiva o procesar la nómina PAE sin alterar el historial.
+- Facilita la asignación rápida de códigos de barras de tarjetas TNE a las fichas de los beneficiarios.
+
+### `UsuariosAdmin.jsx`
+CRUD interactivo para cuentas de acceso al sistema.
+- Permite crear, modificar y dar de baja usuarios especificando su nombre, correo, contraseña y rol asignado.
+- Protege activamente la sesión del administrador autenticado impidiendo que se elimine a sí mismo del sistema.
+
+### `AuditoriaAdmin.jsx`
+Módulo de seguridad forense y auditoría.
+- Consume de forma paginada el log de base de datos (`audit_log`).
+- Dispone de filtros complejos de búsqueda por fecha, correo de ejecutor e IP de origen.
+- Posee un visualizador interactivo de metadatos (JSONB) para analizar en detalle qué cambió en cada acción e importación, además de permitir la descarga de la bitácora a un reporte Excel.

@@ -6,7 +6,7 @@ import { API_URL } from '../config';
 
 function getAutoMealType() {
   const hour = new Date().getHours();
-  return hour < 13 ? 'desayuno' : 'almuerzo';
+  return hour < 12 ? 'desayuno' : 'almuerzo';
 }
 
 function getAutoMealLabel() {
@@ -16,16 +16,22 @@ function getAutoMealLabel() {
 // Horarios de servicio
 function getMealSchedule() {
   const type = getAutoMealType();
-  if (type === 'desayuno') return { start: '07:30', end: '09:30', label: 'Servicio Desayuno' };
-  return { start: '12:30', end: '14:30', label: 'Servicio Almuerzo' };
+  if (type === 'desayuno') return { start: '09:00', end: '11:00', label: 'Servicio Desayuno' };
+  return { start: '12:00', end: '15:00', label: 'Servicio Almuerzo' };
 }
 
 function getTimeRemaining() {
   const now = new Date();
   const schedule = getMealSchedule();
+  const [sh, sm] = schedule.start.split(':').map(Number);
   const [eh, em] = schedule.end.split(':').map(Number);
+  const startMin = sh * 60 + sm;
   const endMin = eh * 60 + em;
   const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  if (nowMin < startMin) {
+    return 'Servicio no iniciado';
+  }
   const diff = endMin - nowMin;
   if (diff <= 0) return 'Servicio finalizado';
   if (diff > 60) return `${Math.floor(diff / 60)}h ${diff % 60}min restantes`;
@@ -33,6 +39,14 @@ function getTimeRemaining() {
 }
 
 const BarcodeScanner = () => {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [inputValue, setInputValue] = useState('');
   const [student, setStudent] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -225,6 +239,7 @@ const BarcodeScanner = () => {
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
+    if (getTimeRemaining() === 'Servicio finalizado') return;
     const value = inputValue.trim();
     if (!value || isProcessing.current) return;
     
@@ -273,6 +288,7 @@ const BarcodeScanner = () => {
 
   // Flujo escáner: buscar → mostrar confirmación 2s → registrar automáticamente
   const scanByBarcode = async (barcode) => {
+    if (getTimeRemaining() === 'Servicio finalizado') return;
     if (isProcessing.current) return;
     isProcessing.current = true;
 
@@ -334,6 +350,7 @@ const BarcodeScanner = () => {
     setInputValue('');
     setSelectedIndex(-1);
     
+    if (getTimeRemaining() === 'Servicio finalizado') return;
     if (isProcessing.current) return;
     isProcessing.current = true;
     
@@ -435,13 +452,14 @@ const BarcodeScanner = () => {
     };
   }, []);
 
+  const schedule = getMealSchedule();
+  const timeRemaining = getTimeRemaining();
+  const isFinished = timeRemaining === 'Servicio finalizado' || timeRemaining === 'Servicio no iniciado';
+
   // Filter search results by course if filter active
   const filteredSearchResults = filterCurso
     ? searchResults.filter(s => s.nombre_curso === filterCurso)
     : searchResults;
-
-  const schedule = getMealSchedule();
-  const timeRemaining = getTimeRemaining();
 
   // Feedback content (reused in both layouts)
   const feedbackContent = (
@@ -513,17 +531,18 @@ const BarcodeScanner = () => {
     <>
       {/* Scanner status indicator */}
       <div 
-        className={`scanner-status ${scannerActive ? 'active' : 'inactive'}`}
-        onClick={handleToggleScanner}
+        className={`scanner-status ${!isFinished && scannerActive ? 'active' : 'inactive'}`}
+        onClick={isFinished ? undefined : handleToggleScanner}
         role="button"
         tabIndex={-1}
-        title={scannerActive ? 'Escáner detectado — click para cambiar' : 'Sin escáner — click para cambiar'}
+        title={isFinished ? (timeRemaining === 'Servicio no iniciado' ? 'Servicio no iniciado' : 'Servicio finalizado') : (scannerActive ? 'Escáner detectado — click para cambiar' : 'Sin escáner — click para cambiar')}
+        style={isFinished ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
       >
-        {scannerActive ? <Zap size={16} /> : <ZapOff size={16} />}
-        <span>{scannerActive ? 'Escáner Activo' : 'Escáner Desactivado'}</span>
+        {!isFinished && scannerActive ? <Zap size={16} /> : <ZapOff size={16} />}
+        <span>{!isFinished && scannerActive ? 'Escáner Activo' : 'Escáner Desactivado'}</span>
       </div>
 
-      {/* Input field — SIEMPRE funciona */}
+      {/* Input field — SIEMPRE funciona (excepto si finalizado) */}
       <form onSubmit={handleSubmit} className="kiosk-input-form">
         <div className="kiosk-input-wrapper">
           <Search size={20} className="kiosk-input-icon" />
@@ -531,17 +550,21 @@ const BarcodeScanner = () => {
             ref={inputRef}
             type="text"
             className="kiosk-input"
-            placeholder={scannerActive ? 'Esperando escaneo de tarjeta...' : 'RUT o nombre del alumno...'}
+            style={isFinished ? { backgroundColor: '#F3F4F6', cursor: 'not-allowed', color: '#9CA3AF' } : {}}
+            placeholder={isFinished ? (timeRemaining === 'Servicio no iniciado' ? 'Servicio no iniciado — ingreso bloqueado' : 'Servicio finalizado — ingreso bloqueado') : (scannerActive ? 'Esperando escaneo de tarjeta...' : 'RUT o nombre del alumno...')}
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            autoFocus
+            disabled={isFinished}
+            autoFocus={!isFinished}
             autoComplete="off"
           />
           <button
             type="button"
             className={`kiosk-filter-btn ${showFilters ? 'active' : ''}`}
-            onClick={() => setShowFilters(prev => !prev)}
+            onClick={isFinished ? undefined : () => setShowFilters(prev => !prev)}
+            disabled={isFinished}
+            style={isFinished ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             title="Filtros avanzados"
           >
             <Filter size={16} />

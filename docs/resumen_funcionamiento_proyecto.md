@@ -28,8 +28,9 @@ Tablas principales:
 - restriccion_dietaria
 - lunch_registrations
 - usuarios
+- audit_log
 
-Tambien incluye fecha_actualizacion en alumno para optimizar importaciones masivas por fila.
+Tambien incluye la tabla audit_log para registro de acciones administrativas e historiales. E incluye fecha_actualizacion en alumno para optimizar importaciones masivas por fila.
 
 ### backend/seed.js
 Recrea tablas desde init.sql e inserta datos de prueba:
@@ -95,6 +96,9 @@ Define rutas y proteccion por rol:
 - /admin (hub)
 - /admin/alimentacion
 - /admin/estudiantes
+- /admin/beneficiarios (admin/asistente_social)
+- /admin/usuarios (admin)
+- /admin/auditoria (admin)
 
 ### frontend/src/context/AuthContext.jsx
 Gestion global de sesion:
@@ -108,14 +112,14 @@ Envia credenciales y redirige segun rol.
 
 ### frontend/src/App.jsx
 Vista principal de lector:
-- cabecera
+- cabecera con branding institucional
 - componente de escaneo
 - boton para ver/ocultar historial
 
 ### frontend/src/components/BarcodeScanner.jsx
 Flujo de escaneo y registro:
-- lee codigo
-- consulta alumno por codigo
+- lee codigo o RUT manual
+- consulta alumno por RUT o codigo TNE
 - valida estado y registros duplicados
 - registra colacion
 - muestra alertas y reproduce sonidos de feedback
@@ -125,9 +129,12 @@ Consulta historial por fechas y filtros.
 Permite exportar resultados a Excel.
 
 ### frontend/src/AdminHub.jsx
-Hub de entrada para admin con 2 accesos:
+Hub de entrada para admin con accesos rápidos a:
 - modulo alimentacion
 - gestor de estudiantes
+- beneficiarios de alimentacion
+- gestion de usuarios
+- auditoria del sistema
 
 ### frontend/src/AdminDashboard.jsx
 Panel admin de alimentacion:
@@ -139,8 +146,25 @@ Panel admin de alimentacion:
 Gestor admin de estudiantes (2 apartados):
 - Listado de estudiantes (por curso o global)
 - Carga de BD (subida Excel + previsualizacion + sincronizacion)
-
 Tambien muestra ficha detallada de alumno con datos familiares, salud y beneficios.
+
+### frontend/src/BeneficiariosAdmin.jsx
+Gestor de becas alimenticias JUNAEB:
+- Alta y edicion individual de beneficiarios y vigencias.
+- Importacion masiva de beneficiarios con generacion de colaciones retroactivas para el mes seleccionado.
+- Importacion de nomina oficial PAE con matching inteligente de RUN/RUT y warnings de filas con errores.
+
+### frontend/src/UsuariosAdmin.jsx
+CRUD de cuentas de usuario:
+- Creacion, modificacion y eliminacion de usuarios del sistema.
+- Roles configurables (admin, lector, asistente_social).
+- Bloqueo preventivo de auto-eliminacion.
+
+### frontend/src/AuditoriaAdmin.jsx
+Visualizador de logs del sistema:
+- Filtros por fecha, IP, correo de usuario y tipo de accion.
+- Visualizador JSON interactivo del campo detalle.
+- Descarga de planilla de auditoria a Excel (XLSX).
 
 ### frontend/src/TestBarcodes.jsx
 Pantalla de prueba para generar/imprimir codigos de barra demo.
@@ -149,21 +173,18 @@ Pantalla de prueba para generar/imprimir codigos de barra demo.
 Genera tonos de audio (exito/advertencia/error) usando Web Audio API.
 
 ### frontend/src/index.css
-Estilos globales y de modulos (lector, historial, admin, reportes, responsive).
+Estilos globales y de modulos (lector, historial, admin, reportes, responsive, tablas y grids de administracion).
 
 ### frontend/src/App.css
-Archivo heredado de plantilla inicial (actualmente no es pieza central del flujo).
+Archivo heredado de plantilla inicial.
 
 ### frontend/src/Nav.jsx
-Navegacion simple de tabs (registro/estudiantes). Actualmente el flujo principal usa rutas de rol en main.jsx.
+Navegacion simple de tabs.
 
 ## 3) Documentacion
 
 ### README.md
 Guia de instalacion, ejecucion, credenciales de prueba y resumen funcional.
-Incluye migraciones puntuales para BD existente:
-- pro_retencion en programa_apoyo
-- fecha_actualizacion en alumno
 
 ### docs/estructura_proyecto.md
 Resumen historico/arquitectonico (enfoque frontend alimentacion).
@@ -173,6 +194,9 @@ Mapa completo de columnas del Excel `datos_ficticios_alumnos.xlsx` hacia tablas 
 
 ### docs/resumen_funcionamiento_proyecto.md
 Este documento.
+
+### docs/NUEVAS_FUNCIONALIDADES_MAYO.md
+Documento que describe las caracteristicas y modulos incorporados en Mayo de 2026.
 
 ---
 
@@ -186,7 +210,7 @@ Este documento.
 5. main.jsx redirige segun rol a scanner o hub admin.
 
 ## 4.2 Flujo de escaneo y registro de colacion
-1. Lector escanea codigo en BarcodeScanner.
+1. Lector escanea codigo o digita RUT en BarcodeScanner.
 2. Frontend llama /api/students/scan/:barcode con tipo de alimentacion.
 3. Backend valida alumno, estado activo, restriccion y duplicidad diaria.
 4. Si procede, frontend registra en /api/lunches.
@@ -217,31 +241,28 @@ Este documento.
 1. Admin entra a apartado Carga de BD en Students.
 2. Sube archivo .xlsx/.xls y ve previsualizacion.
 3. Frontend envia filas a /api/students/bulk-sync.
-4. Backend procesa fila por fila:
-   - normaliza columnas
-   - identifica alumno por RUT
-   - compara fecha_actualizacion (fila vs BD)
-   - si corresponde, hace upsert completo de tablas relacionadas
-5. Backend responde resumen: inserted, updated, unchanged, errors.
-6. Frontend muestra resultado y refresca listado.
+4. Backend procesa fila por fila comparando fecha_actualizacion (fila vs BD) y actualiza o inserta.
 
-## 4.7 Regla de rendimiento por fecha_actualizacion (fila)
-1. Si fecha Excel == fecha BD: fila omitida (unchanged).
-2. Si fecha Excel < fecha BD: fila omitida con warning.
-3. Si fecha Excel > fecha BD: fila sincronizada.
-4. Si alumno no existe: insercion completa.
+## 4.7 Flujo de auditoria de acciones
+1. El backend gatilla `registrarAudit()` durante operaciones sensibles.
+2. Admin entra a `/admin/auditoria`.
+3. El frontend consulta `/api/admin/audit-log` pasandole filtros y paginacion.
+4. El admin visualiza los eventos y expande los metadatos JSON.
 
-## 4.8 Tablas nuevas para campos faltantes del Excel
-1. alumno_complemento: guarda lista, estado, foto, condicionalidad, nacionalidad, religion, opta_religion, cursos_repetidos, colegio_procedencia, retira_titular, retira_suplente, centro_costo, diagnosticos PIE y etnia indigena.
-2. persona_contacto_detalle: guarda fecha_nacimiento, comuna, empresa, telefono_empresa, estudios, profesion y nacionalidad de cada contacto.
-3. salud_detalle: guarda peso, talla, grupo_sangre y banderas de problemas visuales, auditivos, cardiacos y de columna.
-4. emergencia_detalle: guarda seguro, isapre y observaciones adicionales de emergencia.
-5. pago_detalle: guarda co_banco, numero de tarjeta y fecha de vencimiento de tarjeta.
+## 4.8 Flujo de importacion retroactiva de beneficiarios
+1. Admin carga Excel de becarios con marcas del mes en `/admin/beneficiarios`.
+2. Se llama a `/api/admin/beneficiarios/import`.
+3. Se actualizan fichas de beneficio y se inyectan asistencias retroactivas en `lunch_registrations`.
+
+## 4.9 Flujo de importacion de nomina PAE
+1. Admin sube planilla PAE en `/admin/beneficiarios`.
+2. El backend procesa en `/api/admin/beneficiarios/import-pae` buscando alumnos por RUT sin DV.
+3. Retorna warnings para filas no coincidentes sin interrumpir el proceso.
 
 ---
 
 ## 5) Observaciones Operativas
 
 - El proceso masivo depende de que fecha_actualizacion realmente cambie cuando cambia cualquier dato del alumno.
-- Si una fila no trae fecha_actualizacion, el sistema puede procesarla por comparacion de campos.
 - Se recomienda mantener versionado de cambios de esquema (migraciones SQL) para ambientes ya inicializados.
+

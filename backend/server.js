@@ -1625,11 +1625,33 @@ app.get('/api/admin/beneficiarios', verifyToken, verifyRole(['admin', 'asistente
         a.codigo_barra,
         a.tne_codigo_barra,
         a.activo AS alumno_activo,
-        c.nombre_curso
+        c.nombre_curso,
+        s.asma,
+        s.diabetes,
+        s.epilepsia,
+        s.observaciones AS salud_observaciones,
+        em.avisar_a,
+        em.telefono_emergencia,
+        em.trasladar_a,
+        (
+          SELECT COALESCE(string_agg(rd.descripcion, ', '), '')
+          FROM restriccion_dietaria rd
+          WHERE rd.id_alumno = a.id_alumno AND rd.vigente = true
+        ) AS restricciones_dietarias
       FROM beneficiarios_ordenados bo
       JOIN alumno a ON bo.id_alumno = a.id_alumno
       LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
       LEFT JOIN curso c ON m.id_curso = c.id_curso
+      LEFT JOIN (
+        SELECT DISTINCT ON (id_alumno) id_alumno, asma, diabetes, epilepsia, observaciones
+        FROM salud
+        ORDER BY id_alumno, id_salud DESC
+      ) s ON a.id_alumno = s.id_alumno
+      LEFT JOIN (
+        SELECT DISTINCT ON (id_alumno) id_alumno, avisar_a, telefono_emergencia, trasladar_a
+        FROM emergencia
+        ORDER BY id_alumno, id_emergencia DESC
+      ) em ON a.id_alumno = em.id_alumno
       ORDER BY a.paterno ASC, a.nombres ASC, bo.fecha_registro DESC
     `;
     const result = await pool.query(query);

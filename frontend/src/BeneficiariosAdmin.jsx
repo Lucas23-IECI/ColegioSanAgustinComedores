@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import axios from 'axios';
 import {
   ArrowLeft,
@@ -13,10 +13,12 @@ import {
   SlidersHorizontal,
   Upload,
   Users,
-  X
+  X,
+  HeartPulse
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
+import { AuthContext } from './context/AuthContext';
 
 const normalizeHeaderKey = (value) => {
   return String(value || '')
@@ -289,6 +291,7 @@ const emptyForm = {
 };
 
 const BeneficiariosAdmin = () => {
+  const { user } = useContext(AuthContext);
   const [beneficiarios, setBeneficiarios] = useState([]);
   const [students, setStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
@@ -308,6 +311,7 @@ const BeneficiariosAdmin = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [protocolStudent, setProtocolStudent] = useState(null);
 
   const [excelMonth, setExcelMonth] = useState('');
   const [excelFileName, setExcelFileName] = useState('');
@@ -741,6 +745,7 @@ const BeneficiariosAdmin = () => {
                       <th>Estado</th>
                       <th>Desde</th>
                       <th>Motivo</th>
+                      {user?.rol === 'asistente_social' && <th>Protocolo Alimentario</th>}
                       <th style={{ textAlign: 'right' }}>Acciones</th>
                     </tr>
                   </thead>
@@ -765,6 +770,30 @@ const BeneficiariosAdmin = () => {
                           {formatDisplayDate(item.fecha_inicio)}
                         </td>
                         <td style={{ maxWidth: '240px' }}>{item.motivo_ingreso || '—'}</td>
+                        {user?.rol === 'asistente_social' && (
+                          <td>
+                            <button
+                              className="students-ficha-btn"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#FFF5F5',
+                                color: '#C53030',
+                                border: '1px solid #FEB2B2',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontWeight: 600,
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onClick={() => setProtocolStudent(item)}
+                            >
+                              <HeartPulse size={14} /> Ver ficha
+                            </button>
+                          </td>
+                        )}
                         <td style={{ textAlign: 'right' }}>
                           <button className="students-ficha-btn" onClick={() => editBeneficiario(item)}>
                             <Edit3 size={14} /> Editar
@@ -1103,6 +1132,255 @@ const BeneficiariosAdmin = () => {
           </div>
         )}
       </div>
+      {/* Modal de Protocolo Alimentario */}
+      {protocolStudent && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: '100%',
+            maxWidth: '550px',
+            overflow: 'hidden',
+            border: '1px solid #E2E8F0',
+            textAlign: 'left'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+              color: '#FFFFFF',
+              padding: '20px 24px',
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <HeartPulse size={22} /> Protocolo Alimentario
+                </h3>
+                <p style={{ margin: '4px 0 0 0', opacity: 0.9, fontSize: '0.88rem' }}>
+                  Ficha Médica y Restricciones del Alumno
+                </p>
+              </div>
+              <button 
+                onClick={() => setProtocolStudent(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto' }}>
+              {/* Alumno Info */}
+              <div style={{
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '12px',
+                padding: '14px 18px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1E293B' }}>
+                  {protocolStudent.nombres} {protocolStudent.paterno} {protocolStudent.materno || ''}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px', fontSize: '0.85rem', color: '#64748B' }}>
+                  <span><strong>RUT:</strong> {formatRutWithDv(protocolStudent.rut, protocolStudent.dv)}</span>
+                  <span><strong>Curso:</strong> {protocolStudent.nombre_curso || 'Sin curso'}</span>
+                </div>
+              </div>
+
+              {/* Seccion 1: Restricciones Alimentarias / Alergias */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.95rem', fontWeight: 700, color: '#DC2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🥗 Alergias / Restricciones Alimentarias
+                </h4>
+                <div style={{
+                  background: protocolStudent.restricciones_dietarias ? '#FEF2F2' : '#F0FDF4',
+                  border: `1px solid ${protocolStudent.restricciones_dietarias ? '#FCA5A5' : '#BBF7D0'}`,
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  fontSize: '0.9rem',
+                  color: protocolStudent.restricciones_dietarias ? '#991B1B' : '#166534',
+                  fontWeight: protocolStudent.restricciones_dietarias ? '600' : 'normal'
+                }}>
+                  {protocolStudent.restricciones_dietarias ? (
+                    <div>{protocolStudent.restricciones_dietarias}</div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>✔️</span> Sin restricciones dietarias ni alergias alimentarias registradas.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Seccion 2: Enfermedades Crónicas */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.95rem', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🩺 Diagnósticos de Salud
+                </h4>
+                <div style={{
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    background: '#F8FAFC',
+                    borderBottom: '1px solid #E2E8F0',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    color: '#64748B',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ padding: '8px', borderRight: '1px solid #E2E8F0' }}>Asma</div>
+                    <div style={{ padding: '8px', borderRight: '1px solid #E2E8F0' }}>Diabetes</div>
+                    <div style={{ padding: '8px' }}>Epilepsia</div>
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    fontSize: '0.9rem',
+                    textAlign: 'center',
+                    color: '#1E293B',
+                    fontWeight: 600
+                  }}>
+                    <div style={{
+                      padding: '10px',
+                      borderRight: '1px solid #E2E8F0',
+                      background: protocolStudent.asma ? '#FEE2E2' : '#FFFFFF',
+                      color: protocolStudent.asma ? '#EF4444' : '#1E293B'
+                    }}>
+                      {protocolStudent.asma ? 'SÍ' : 'No'}
+                    </div>
+                    <div style={{
+                      padding: '10px',
+                      borderRight: '1px solid #E2E8F0',
+                      background: protocolStudent.diabetes ? '#FEE2E2' : '#FFFFFF',
+                      color: protocolStudent.diabetes ? '#EF4444' : '#1E293B'
+                    }}>
+                      {protocolStudent.diabetes ? 'SÍ' : 'No'}
+                    </div>
+                    <div style={{
+                      padding: '10px',
+                      background: protocolStudent.epilepsia ? '#FEE2E2' : '#FFFFFF',
+                      color: protocolStudent.epilepsia ? '#EF4444' : '#1E293B'
+                    }}>
+                      {protocolStudent.epilepsia ? 'SÍ' : 'No'}
+                    </div>
+                  </div>
+                </div>
+                {protocolStudent.salud_observaciones && (
+                  <div style={{
+                    marginTop: '10px',
+                    background: '#FFFBEB',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    fontSize: '0.85rem',
+                    color: '#B45309',
+                    fontStyle: 'italic'
+                  }}>
+                    <strong>Indicaciones del Dr:</strong> "{protocolStudent.salud_observaciones}"
+                  </div>
+                )}
+              </div>
+
+              {/* Seccion 3: Emergencias */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.95rem', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🚨 Protocolo en caso de Emergencia
+                </h4>
+                <div style={{
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  fontSize: '0.9rem',
+                  color: '#334155',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div>
+                    <strong>Avisar a:</strong> {protocolStudent.avisar_a || 'No registrado'}
+                  </div>
+                  {protocolStudent.telefono_emergencia && (
+                    <div>
+                      <strong>Teléfono de contacto:</strong> <a href={`tel:${protocolStudent.telefono_emergencia}`} style={{ color: '#EF4444', fontWeight: 600, textDecoration: 'none' }}>{protocolStudent.telefono_emergencia}</a>
+                    </div>
+                  )}
+                  <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '8px', marginTop: '4px' }}>
+                    <strong>Centro de Traslado:</strong>{' '}
+                    <span style={{
+                      color: protocolStudent.trasladar_a ? '#DC2626' : '#64748B',
+                      fontWeight: protocolStudent.trasladar_a ? '700' : 'normal'
+                    }}>
+                      {protocolStudent.trasladar_a || 'Ninguno especificado (Servicio Público)'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              background: '#F8FAFC',
+              borderTop: '1px solid #E2E8F0',
+              padding: '16px 24px',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setProtocolStudent(null)}
+                style={{
+                  background: '#1E293B',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#0F172A'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#1E293B'}
+              >
+                Cerrar Ficha
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

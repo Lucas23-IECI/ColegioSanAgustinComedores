@@ -287,7 +287,8 @@ const emptyForm = {
   fecha_inicio: '',
   fecha_fin: '',
   motivo_ingreso: '',
-  tne_codigo_barra: ''
+  tne_codigo_barra: '',
+  restricciones: ''
 };
 
 const BeneficiariosAdmin = () => {
@@ -369,7 +370,8 @@ const BeneficiariosAdmin = () => {
       fecha_inicio: formatDateInput(item.fecha_inicio),
       fecha_fin: formatDateInput(item.fecha_fin),
       motivo_ingreso: item.motivo_ingreso || '',
-      tne_codigo_barra: item.tne_codigo_barra || ''
+      tne_codigo_barra: item.tne_codigo_barra || '',
+      restricciones: item.restricciones_dietarias || ''
     });
     setMessage('');
     setError('');
@@ -398,7 +400,11 @@ const BeneficiariosAdmin = () => {
           fecha_inicio: form.fecha_inicio || null,
           fecha_fin: form.fecha_fin || null,
           motivo_ingreso: form.motivo_ingreso || null,
-          tne_codigo_barra: form.tne_codigo_barra || null
+          tne_codigo_barra: form.tne_codigo_barra || null,
+          // Enviar restricciones como array si el textarea tiene contenido
+          restricciones: (typeof form.restricciones === 'string' && form.restricciones.trim())
+            ? form.restricciones.split(/[;,|]+/).map(s => s.trim()).filter(Boolean)
+            : []
         },
         { withCredentials: true }
       );
@@ -916,6 +922,17 @@ const BeneficiariosAdmin = () => {
                     onChange={(e) => setForm((prev) => ({ ...prev, tne_codigo_barra: e.target.value }))}
                     placeholder="Código de barra de tarjeta TNE"
                     style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit' }}
+                  />
+                </label>
+
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-light)', fontWeight: 600 }}>Restricciones dietarias / alergias <span style={{ fontWeight: 400, fontSize: '0.8rem' }}>(separar por comas)</span></span>
+                  <textarea
+                    value={form.restricciones}
+                    onChange={(e) => setForm((prev) => ({ ...prev, restricciones: e.target.value }))}
+                    placeholder="Ej: Celíaca, Intolerante a la lactosa, Alérgico al maní"
+                    rows={3}
+                    style={{ padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.12)', fontFamily: 'inherit', resize: 'vertical' }}
                   />
                 </label>
 

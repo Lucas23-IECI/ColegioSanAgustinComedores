@@ -191,6 +191,7 @@ const ensureExcelDerivedTables = async () => {
   await pool.query(`ALTER TABLE persona_contacto ALTER COLUMN telefono TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE persona_contacto_detalle ALTER COLUMN telefono_empresa TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE alumno_complemento ALTER COLUMN foto TYPE VARCHAR(255)`);
+  await pool.query(`ALTER TABLE salud ADD COLUMN IF NOT EXISTS alergia_medicamentos VARCHAR(255)`);
   await pool.query(`ALTER TABLE salud_detalle ALTER COLUMN peso TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE salud_detalle ALTER COLUMN talla TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE emergencia ALTER COLUMN telefono_emergencia TYPE VARCHAR(50)`);
@@ -1071,6 +1072,89 @@ const importLunchRegistrationsFromBeneficiaries = async (client, idAlumno, month
   return { inserted, skipped, month: monthInfo.monthKey };
 };
 
+/**
+ * Consolida restricciones dietarias para un alumno.
+ * Si restricciones_array es vacío o null, marca vigentes como false.
+ * Si tiene items, normaliza, deduplica y consolida en UNA fila vigente.
+ */
+const consolidateAndSaveRestrictions = async (client, idAlumno, restricciones_array) => {
+  const normalizeForCompare = (s) => {
+    if (!s) return '';
+    return String(s)
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const allergyKeywords = ['alerg', 'anafil', 'urtic'];
+  const dietKeywords = ['hiposod', 'sin sal', 'baja sal', 'vegetar', 'vegan', 'vegano', 'vegana'];
+  const intoleranceKeywords = ['intoler', 'lactosa', 'gluten', 'celi', 'celiac'];
+
+  const detectPrefix = (normText) => {
+    for (const k of allergyKeywords) if (normText.includes(k)) return 'Alergia: ';
+    for (const k of intoleranceKeywords) if (normText.includes(k)) return 'Intolerancia: ';
+    for (const k of dietKeywords) if (normText.includes(k)) return 'Dieta especial: ';
+    return '';
+  };
+
+  // Normalize incoming into unique items
+  const incomingSet = new Map(); // normalized -> original
+  if (Array.isArray(restricciones_array)) {
+    for (const r of restricciones_array) {
+      const s = sanitizeText(r);
+      if (!s) continue;
+      const norm = normalizeForCompare(s);
+      if (!norm) continue;
+      if (!incomingSet.has(norm)) incomingSet.set(norm, s);
+    }
+  }
+
+  const incomingNorms = Array.from(incomingSet.keys()).sort();
+
+  // Obtener restricciones vigentes actuales
+  const existRes = await client.query(
+    'SELECT id_restriccion, descripcion FROM restriccion_dietaria WHERE id_alumno = $1 AND vigente = true',
+    [idAlumno]
+  );
+  const existing = existRes.rows || [];
+
+  if (incomingNorms.length === 0) {
+    // No vienen restricciones: marcar existentes como no vigentes
+    for (const e of existing) {
+      await client.query('UPDATE restriccion_dietaria SET vigente = false WHERE id_restriccion = $1', [e.id_restriccion]);
+    }
+  } else {
+    // Crear descripción única ordenada y con prefijos heurísticos
+    const descriptionParts = incomingNorms.map((norm) => {
+      const original = incomingSet.get(norm) || norm;
+      const prefix = detectPrefix(norm);
+      return prefix + original;
+    });
+    const joinedDescription = descriptionParts.join(', ');
+    const joinedNorm = normalizeForCompare(joinedDescription);
+
+    // Verificar si ya existe con la misma descripción normalizada
+    const existingMap = new Map();
+    for (const e of existing) {
+      const norm = normalizeForCompare(e.descripcion);
+      if (norm) existingMap.set(norm, e);
+    }
+
+    if (!existingMap.has(joinedNorm)) {
+      // Insertar nueva entrada consolidada
+      await client.query('INSERT INTO restriccion_dietaria (id_alumno, descripcion, vigente) VALUES ($1, $2, true)', [idAlumno, joinedDescription]);
+
+      // Marcar otras vigentes como no vigentes
+      for (const e of existing) {
+        await client.query('UPDATE restriccion_dietaria SET vigente = false WHERE id_restriccion = $1', [e.id_restriccion]);
+      }
+    }
+  }
+};
+
 // === UTILIDADES INTERNAS ===
 
 const getClientIp = (req) => {
@@ -1707,6 +1791,25 @@ app.post('/api/admin/beneficiarios', verifyToken, verifyRole(['admin', 'asistent
       motivo_ingreso: motivoIngreso
     });
 
+    // --- Manejo de restricciones dietarias (si vienen en el body)
+    try {
+      const rawRestrictions = req.body?.restricciones ?? req.body?.restricciones_dietarias ?? null;
+      const restrictionsArray = [];
+
+      if (Array.isArray(rawRestrictions)) {
+        restrictionsArray.push(...rawRestrictions);
+      } else if (typeof rawRestrictions === 'string' && rawRestrictions.trim()) {
+        for (const part of rawRestrictions.split(/[;,|]/)) {
+          const s = sanitizeText(part);
+          if (s) restrictionsArray.push(s);
+        }
+      }
+
+      await consolidateAndSaveRestrictions(client, idAlumno, restrictionsArray);
+    } catch (restrErr) {
+      console.error('[beneficiarios/save] Error al actualizar restricciones dietarias', restrErr.message);
+    }
+
     await client.query('COMMIT');
     res.json({ message: 'Beneficiario guardado correctamente.', beneficiario: result.row, action: result.action });
   } catch (err) {
@@ -2324,7 +2427,8 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
           asma: normalized.asma === null ? false : normalized.asma,
           diabetes: normalized.diabetes === null ? false : normalized.diabetes,
           epilepsia: normalized.epilepsia === null ? false : normalized.epilepsia,
-          observaciones: toNullable(normalized.observacionesSalud)
+          observaciones: toNullable(normalized.observacionesSalud),
+          alergia_medicamentos: toNullable(normalized.alergiaMedicamentos) // Guardar aquí, no en restriccion_dietaria
         });
         if (changedSalud) rowChanged = true;
 
@@ -2390,46 +2494,21 @@ app.post('/api/students/bulk-sync', verifyToken, verifyRole(['admin']), async (r
           if (changedBenef) rowChanged = true;
         }
 
-        if (normalized.alergiaMedicamentos) {
-          const restrictionText = `Alergia medicamentos: ${normalized.alergiaMedicamentos}`;
-          const existingRestriction = await client.query(
-            `
-              SELECT id_restriccion
-              FROM restriccion_dietaria
-              WHERE id_alumno = $1 AND vigente = true AND LOWER(descripcion) = LOWER($2)
-              LIMIT 1
-            `,
-            [idAlumno, restrictionText]
-          );
-          if (existingRestriction.rows.length === 0) {
-            await client.query(
-              'INSERT INTO restriccion_dietaria (id_alumno, descripcion, vigente) VALUES ($1, $2, true)',
-              [idAlumno, restrictionText]
-            );
-            rowChanged = true;
-          }
-        }
-
-        if (normalized.restriccionDietaria.length > 0) {
-          for (const rawRestriction of normalized.restriccionDietaria) {
-            const existingRestriction = await client.query(
-              `
-                SELECT id_restriccion
-                FROM restriccion_dietaria
-                WHERE id_alumno = $1 AND vigente = true AND LOWER(descripcion) = LOWER($2)
-                LIMIT 1
-              `,
-              [idAlumno, rawRestriction]
-            );
-            if (existingRestriction.rows.length === 0) {
-              await client.query(
-                'INSERT INTO restriccion_dietaria (id_alumno, descripcion, vigente) VALUES ($1, $2, true)',
-                [idAlumno, rawRestriction]
-              );
-              rowChanged = true;
+        // Consolidar SOLO restricciones dietarias (alergias alimentarias, dietas especiales)
+        // Nota: alergia_medicamentos se guarda en tabla salud, no aquí
+        const allRestrictions = [];
+        
+        if (Array.isArray(normalized.restriccionDietaria)) {
+          for (const r of normalized.restriccionDietaria) {
+            const trimmed = sanitizeText(r);
+            if (trimmed && trimmed.toLowerCase() !== 'no') {
+              allRestrictions.push(trimmed);
             }
           }
         }
+
+        await consolidateAndSaveRestrictions(client, idAlumno, allRestrictions);
+        if (allRestrictions.length > 0) rowChanged = true;
 
         for (const contact of normalized.contactos) {
           const roleKey = normalizeKeyword(contact.role);

@@ -150,7 +150,8 @@ CREATE TABLE salud (
   asma BOOLEAN DEFAULT false,
   diabetes BOOLEAN DEFAULT false,
   epilepsia BOOLEAN DEFAULT false,
-  observaciones TEXT
+  observaciones TEXT,
+  alergia_medicamentos VARCHAR(255)
 );
 
 CREATE TABLE salud_detalle (

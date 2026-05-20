@@ -1526,23 +1526,42 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asi
     if (!isSegmented) {
       // Reporte Masivo: Sólo alumnos que efectivamente tengan registros de colación
       let whereExtra = '';
+      let ctePart = '';
+      let extraJoin = '';
+      let extraSelect = '';
       if (tipo === 'almuerzo') {
         whereExtra += ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
       } else if (tipo === 'desayuno') {
         whereExtra += ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
       } else if (tipo === 'no_beneficiarios') {
         whereExtra += ` AND lr.es_beneficiario_al_momento = false`;
+        ctePart = `
+          WITH cambios_estado AS (
+            SELECT id_alumno,
+              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = true) as fecha_cambio_a_beneficiario,
+              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = false) as fecha_cambio_a_no_beneficiario
+            FROM lunch_registrations
+            WHERE fecha_entrega >= $1 AND fecha_entrega <= $2
+            GROUP BY id_alumno
+            HAVING COUNT(DISTINCT es_beneficiario_al_momento) > 1
+          )
+        `;
+        extraJoin = `LEFT JOIN cambios_estado ce ON lr.id_alumno = ce.id_alumno`;
+        extraSelect = `, ce.fecha_cambio_a_beneficiario, ce.fecha_cambio_a_no_beneficiario`;
       }
 
       query = `
+        ${ctePart}
         SELECT 
           a.id_alumno, a.rut, a.dv, a.nombres, a.paterno, a.materno, a.email,
           c.nombre_curso,
           lr.fecha_entrega::TEXT as fecha_entrega, lr.tipo_alimentacion
+          ${extraSelect}
         FROM lunch_registrations lr
         JOIN alumno a ON lr.id_alumno = a.id_alumno
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
+        ${extraJoin}
         WHERE lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
         ${whereExtra}
         ORDER BY a.paterno ASC, a.materno ASC, a.nombres ASC, lr.fecha_entrega ASC
@@ -1551,6 +1570,9 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asi
       // Reporte Segmentado: Listar todos los alumnos del segmento y asociar sus registros (si existen)
       let whereExtraSegmento = '';
       let whereExtraTipo = '';
+      let ctePart = '';
+      let extraJoin = '';
+      let extraSelect = '';
 
       if (tipo === 'almuerzo') {
         whereExtraTipo = ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
@@ -1558,6 +1580,19 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asi
         whereExtraTipo = ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
       } else if (tipo === 'no_beneficiarios') {
         whereExtraTipo = ` AND lr.es_beneficiario_al_momento = false`;
+        ctePart = `
+          WITH cambios_estado AS (
+            SELECT id_alumno,
+              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = true) as fecha_cambio_a_beneficiario,
+              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = false) as fecha_cambio_a_no_beneficiario
+            FROM lunch_registrations
+            WHERE fecha_entrega >= $1 AND fecha_entrega <= $2
+            GROUP BY id_alumno
+            HAVING COUNT(DISTINCT es_beneficiario_al_momento) > 1
+          )
+        `;
+        extraJoin = `LEFT JOIN cambios_estado ce ON a.id_alumno = ce.id_alumno`;
+        extraSelect = `, ce.fecha_cambio_a_beneficiario, ce.fecha_cambio_a_no_beneficiario`;
       }
 
       if (cursoId) {
@@ -1588,16 +1623,19 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asi
       }
 
       query = `
+        ${ctePart}
         SELECT 
           a.id_alumno, a.rut, a.dv, a.nombres, a.paterno, a.materno, a.email,
           c.nombre_curso,
           lr.fecha_entrega::TEXT as fecha_entrega, lr.tipo_alimentacion
+          ${extraSelect}
         FROM alumno a
         LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
         LEFT JOIN curso c ON m.id_curso = c.id_curso
         LEFT JOIN lunch_registrations lr ON a.id_alumno = lr.id_alumno 
           AND lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
           ${whereExtraTipo}
+        ${extraJoin}
         WHERE a.activo = true
           ${whereExtraSegmento}
         ORDER BY a.paterno ASC, a.materno ASC, a.nombres ASC, lr.fecha_entrega ASC

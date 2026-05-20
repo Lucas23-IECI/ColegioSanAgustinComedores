@@ -194,8 +194,21 @@ const AdminDashboard = () => {
             nombres: r.nombres,
             curso: r.nombre_curso || 'S/C',
             correo: r.email || '',
-            days: {} // { 'YYYY-MM-DD': ['Almuerzo', 'Desayuno'] }
+            days: {},
+            observacion: ''
           };
+        }
+        // Detectar cambio de estado beneficiario dentro del período
+        if (r.fecha_cambio_a_beneficiario && !studentsMap[key].observacion) {
+          const fb = r.fecha_cambio_a_beneficiario.substring(0, 10);
+          const fnb = r.fecha_cambio_a_no_beneficiario ? r.fecha_cambio_a_no_beneficiario.substring(0, 10) : null;
+          if (!fnb || fnb < fb) {
+            const d = new Date(fb + 'T12:00:00');
+            studentsMap[key].observacion = `Pasó a Beneficiario el ${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+          } else {
+            const d = new Date(fnb + 'T12:00:00');
+            studentsMap[key].observacion = `Dejó de ser Beneficiario el ${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+          }
         }
         if (r.fecha_entrega) {
           const dateKey = r.fecha_entrega.substring(0, 10);
@@ -208,6 +221,7 @@ const AdminDashboard = () => {
 
       const students = Object.values(studentsMap);
       students.sort((a, b) => a.apellidos.localeCompare(b.apellidos));
+      const hasObservaciones = students.some(s => s.observacion);
 
       // Determine months in range
       const startDate = new Date(reportDesde + 'T12:00:00');
@@ -226,6 +240,7 @@ const AdminDashboard = () => {
         // === FORMATO RESUMIDO: tabla simple con totales ===
         const titleRow = [`RESUMEN PAE — ${reportLabel.toUpperCase()} — ${reportDesde} a ${reportHasta}`];
         const headerRow = ['N°', 'APELLIDOS', 'NOMBRE', 'CURSO', 'Total Desayunos', 'Total Almuerzos', 'Total Días', 'ESTADO', 'CORREO'];
+        if (hasObservaciones) headerRow.push('OBSERVACIONES');
 
         const dataRows = students.map((s, idx) => {
           let totalD = 0, totalA = 0;
@@ -236,13 +251,18 @@ const AdminDashboard = () => {
             if (meals.includes('almuerzo')) totalA++;
           });
           const estado = diasUnicos.size > 0 ? 'Con consumos' : 'Sin registro';
-          return [idx + 1, s.apellidos, s.nombres, s.curso, totalD, totalA, diasUnicos.size, estado, s.correo];
+          const row = [idx + 1, s.apellidos, s.nombres, s.curso, totalD, totalA, diasUnicos.size, estado, s.correo];
+          if (hasObservaciones) row.push(s.observacion || '');
+          return row;
         });
 
         const aoa = [titleRow, headerRow, ...dataRows];
         const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
-        ws['!cols'] = [{ wch: 4 }, { wch: 22 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 15 }, { wch: 30 }];
+        const totalResumidoCols = hasObservaciones ? 10 : 9;
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalResumidoCols - 1 } }];
+        const colWidthsResumido = [{ wch: 4 }, { wch: 22 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 15 }, { wch: 30 }];
+        if (hasObservaciones) colWidthsResumido.push({ wch: 40 });
+        ws['!cols'] = colWidthsResumido;
         XLSX.utils.book_append_sheet(wb, ws, reportLabel.substring(0, 31));
 
       } else {
@@ -262,6 +282,7 @@ const AdminDashboard = () => {
           }
           headerRow1.push('ESTADO', 'CORREO');
           headerRow2.push('', '');
+          if (hasObservaciones) { headerRow1.push('OBSERVACIONES'); headerRow2.push(''); }
 
           const dataRows = students.map((s, idx) => {
             const row = [idx + 1, s.apellidos, s.nombres, s.curso];
@@ -277,13 +298,14 @@ const AdminDashboard = () => {
             const estadoMes = totalMarcasMes > 0 ? 'Con consumos' : 'Sin registro';
             row.push(estadoMes);
             row.push(s.correo);
+            if (hasObservaciones) row.push(s.observacion || '');
             return row;
           });
 
           const aoa = [titleRow, headerRow1, headerRow2, ...dataRows];
           const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-          const totalCols = 4 + (daysInMonth * 2) + 2;
+          const totalCols = 4 + (daysInMonth * 2) + 2 + (hasObservaciones ? 1 : 0);
           ws['!merges'] = [
             { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }
           ];
@@ -297,6 +319,7 @@ const AdminDashboard = () => {
             colWidths.push({ wch: 3 }, { wch: 3 });
           }
           colWidths.push({ wch: 15 }, { wch: 30 });
+          if (hasObservaciones) colWidths.push({ wch: 40 });
           ws['!cols'] = colWidths;
 
           const sheetName = months.length === 1

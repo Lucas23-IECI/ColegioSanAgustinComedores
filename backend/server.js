@@ -1513,34 +1513,98 @@ app.get('/api/admin/alimentacion/resumen-dia', verifyToken, verifyRole(['admin',
 
 // === REPORTE MATRICIAL DE ASISTENCIA ===
 app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asistente_social']), async (req, res) => {
-  const { desde, hasta, tipo } = req.query;
+  const { desde, hasta, tipo, cursoId, nivelId, alumnoId, alumnosIds } = req.query;
   if (!desde || !hasta) return res.status(400).json({ message: 'Faltan fechas desde/hasta' });
 
   try {
-    let whereExtra = '';
-    if (tipo === 'almuerzo') {
-      whereExtra = ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
-    } else if (tipo === 'desayuno') {
-      whereExtra = ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
-    } else if (tipo === 'no_beneficiarios') {
-      whereExtra = ` AND lr.es_beneficiario_al_momento = false`;
-    }
-    // tipo === 'general' => sin filtro extra
+    const params = [desde, hasta];
+    let paramIndex = 3;
+    const isSegmented = !!(cursoId || nivelId || alumnoId || alumnosIds);
 
-    const query = `
-      SELECT 
-        a.id_alumno, a.rut, a.dv, a.nombres, a.paterno, a.materno, a.email,
-        c.nombre_curso,
-        lr.fecha_entrega::TEXT as fecha_entrega, lr.tipo_alimentacion
-      FROM lunch_registrations lr
-      JOIN alumno a ON lr.id_alumno = a.id_alumno
-      LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
-      LEFT JOIN curso c ON m.id_curso = c.id_curso
-      WHERE lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
-      ${whereExtra}
-      ORDER BY a.paterno ASC, a.materno ASC, a.nombres ASC, lr.fecha_entrega ASC
-    `;
-    const result = await pool.query(query, [desde, hasta]);
+    let query = '';
+
+    if (!isSegmented) {
+      // Reporte Masivo: Sólo alumnos que efectivamente tengan registros de colación
+      let whereExtra = '';
+      if (tipo === 'almuerzo') {
+        whereExtra += ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
+      } else if (tipo === 'desayuno') {
+        whereExtra += ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
+      } else if (tipo === 'no_beneficiarios') {
+        whereExtra += ` AND lr.es_beneficiario_al_momento = false`;
+      }
+
+      query = `
+        SELECT 
+          a.id_alumno, a.rut, a.dv, a.nombres, a.paterno, a.materno, a.email,
+          c.nombre_curso,
+          lr.fecha_entrega::TEXT as fecha_entrega, lr.tipo_alimentacion
+        FROM lunch_registrations lr
+        JOIN alumno a ON lr.id_alumno = a.id_alumno
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        WHERE lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
+        ${whereExtra}
+        ORDER BY a.paterno ASC, a.materno ASC, a.nombres ASC, lr.fecha_entrega ASC
+      `;
+    } else {
+      // Reporte Segmentado: Listar todos los alumnos del segmento y asociar sus registros (si existen)
+      let whereExtraSegmento = '';
+      let whereExtraTipo = '';
+
+      if (tipo === 'almuerzo') {
+        whereExtraTipo = ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
+      } else if (tipo === 'desayuno') {
+        whereExtraTipo = ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
+      } else if (tipo === 'no_beneficiarios') {
+        whereExtraTipo = ` AND lr.es_beneficiario_al_momento = false`;
+      }
+
+      if (cursoId) {
+        whereExtraSegmento += ` AND m.id_curso = $${paramIndex}`;
+        params.push(parseInt(cursoId, 10));
+        paramIndex++;
+      }
+
+      if (nivelId) {
+        whereExtraSegmento += ` AND c.id_nivel = $${paramIndex}`;
+        params.push(parseInt(nivelId, 10));
+        paramIndex++;
+      }
+
+      if (alumnoId) {
+        whereExtraSegmento += ` AND a.id_alumno = $${paramIndex}`;
+        params.push(parseInt(alumnoId, 10));
+        paramIndex++;
+      }
+
+      if (alumnosIds) {
+        const idsArray = alumnosIds.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+        if (idsArray.length > 0) {
+          whereExtraSegmento += ` AND a.id_alumno = ANY($${paramIndex}::int[])`;
+          params.push(idsArray);
+          paramIndex++;
+        }
+      }
+
+      query = `
+        SELECT 
+          a.id_alumno, a.rut, a.dv, a.nombres, a.paterno, a.materno, a.email,
+          c.nombre_curso,
+          lr.fecha_entrega::TEXT as fecha_entrega, lr.tipo_alimentacion
+        FROM alumno a
+        LEFT JOIN matricula m ON a.id_alumno = m.id_alumno
+        LEFT JOIN curso c ON m.id_curso = c.id_curso
+        LEFT JOIN lunch_registrations lr ON a.id_alumno = lr.id_alumno 
+          AND lr.fecha_entrega >= $1 AND lr.fecha_entrega <= $2
+          ${whereExtraTipo}
+        WHERE a.activo = true
+          ${whereExtraSegmento}
+        ORDER BY a.paterno ASC, a.materno ASC, a.nombres ASC, lr.fecha_entrega ASC
+      `;
+    }
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);
@@ -1609,6 +1673,17 @@ app.get('/api/lunches/today-stats', verifyToken, verifyRole(['lector', 'admin'])
 app.get('/api/courses', verifyToken, async (req, res) => {
   try {
     const query = `SELECT id_curso, nombre_curso FROM curso ORDER BY nombre_curso ASC`;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+app.get('/api/levels', verifyToken, async (req, res) => {
+  try {
+    const query = `SELECT id_nivel, nombre FROM nivel_ensenanza ORDER BY nombre ASC`;
     const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {

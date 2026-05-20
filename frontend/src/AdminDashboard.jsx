@@ -34,6 +34,24 @@ const AdminDashboard = () => {
   const { logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
+  // Estados de segmentación de reportes
+  const [reportScope, setReportScope] = useState('masivo'); // 'masivo' | 'curso' | 'nivel' | 'individual' | 'personalizado'
+  const [courses, setCourses] = useState([]);
+  const [levels, setLevels] = useState([]);
+  const [selectedCursoId, setSelectedCursoId] = useState('');
+  const [selectedNivelId, setSelectedNivelId] = useState('');
+  
+  // Para reporte individual
+  const [selectedAlumno, setSelectedAlumno] = useState(null);
+  
+  // Para reporte personalizado
+  const [selectedAlumnos, setSelectedAlumnos] = useState([]);
+  
+  // Para buscar alumnos
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [studentSearchResults, setStudentSearchResults] = useState([]);
+  const [isSearchingStudents, setIsSearchingStudents] = useState(false);
+
   useEffect(() => {
     // Defaults para este mes
     const now = new Date();
@@ -45,6 +63,46 @@ const AdminDashboard = () => {
     fetchResumen();
     fetchRegistrosHoy();
   }, []);
+
+  // Cargar cursos y niveles al abrir el panel
+  useEffect(() => {
+    if (showReportPanel) {
+      if (courses.length === 0) {
+        axios.get(`${API_URL}/courses`, { withCredentials: true })
+          .then(res => setCourses(res.data))
+          .catch(err => console.error(err));
+      }
+      if (levels.length === 0) {
+        axios.get(`${API_URL}/levels`, { withCredentials: true })
+          .then(res => setLevels(res.data))
+          .catch(err => console.error(err));
+      }
+    }
+  }, [showReportPanel]);
+
+  // Búsqueda inteligente de alumnos para reportes individuales/personalizados
+  useEffect(() => {
+    if (studentSearchTerm.trim().length < 2) {
+      setStudentSearchResults([]);
+      return;
+    }
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingStudents(true);
+      try {
+        const res = await axios.get(`${API_URL}/students/search`, {
+          params: { q: studentSearchTerm },
+          withCredentials: true
+        });
+        setStudentSearchResults(res.data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearchingStudents(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [studentSearchTerm]);
 
   const fetchResumen = async () => {
     setLoading(true);
@@ -80,10 +138,39 @@ const AdminDashboard = () => {
 
   const generateReport = async () => {
     if (!reportDesde || !reportHasta) return;
+
+    if (reportScope === 'curso' && !selectedCursoId) {
+      alert('Por favor selecciona un curso.');
+      return;
+    }
+    if (reportScope === 'nivel' && !selectedNivelId) {
+      alert('Por favor selecciona un nivel.');
+      return;
+    }
+    if (reportScope === 'individual' && !selectedAlumno) {
+      alert('Por favor busca y selecciona un alumno.');
+      return;
+    }
+    if (reportScope === 'personalizado' && selectedAlumnos.length === 0) {
+      alert('Por favor agrega al menos un alumno al reporte.');
+      return;
+    }
+
     setGeneratingReport(true);
     try {
+      const params = { desde: reportDesde, hasta: reportHasta, tipo: reportType };
+      if (reportScope === 'curso') {
+        params.cursoId = selectedCursoId;
+      } else if (reportScope === 'nivel') {
+        params.nivelId = selectedNivelId;
+      } else if (reportScope === 'individual') {
+        params.alumnoId = selectedAlumno.id_alumno;
+      } else if (reportScope === 'personalizado') {
+        params.alumnosIds = selectedAlumnos.map(a => a.id_alumno).join(',');
+      }
+
       const res = await axios.get(`${API_URL}/admin/reportes/asistencia`, {
-        params: { desde: reportDesde, hasta: reportHasta, tipo: reportType },
+        params,
         withCredentials: true
       });
 
@@ -110,12 +197,13 @@ const AdminDashboard = () => {
             days: {} // { 'YYYY-MM-DD': ['Almuerzo', 'Desayuno'] }
           };
         }
-        // Handle both '2026-04-11' and '2026-04-11T00:00:00.000Z' formats
-        const dateKey = r.fecha_entrega.substring(0, 10);
-        if (!studentsMap[key].days[dateKey]) {
-          studentsMap[key].days[dateKey] = [];
+        if (r.fecha_entrega) {
+          const dateKey = r.fecha_entrega.substring(0, 10);
+          if (!studentsMap[key].days[dateKey]) {
+            studentsMap[key].days[dateKey] = [];
+          }
+          studentsMap[key].days[dateKey].push((r.tipo_alimentacion || '').toString().trim().toLowerCase());
         }
-        studentsMap[key].days[dateKey].push((r.tipo_alimentacion || '').toString().trim().toLowerCase());
       });
 
       const students = Object.values(studentsMap);
@@ -137,7 +225,7 @@ const AdminDashboard = () => {
       if (reportFormat === 'resumido') {
         // === FORMATO RESUMIDO: tabla simple con totales ===
         const titleRow = [`RESUMEN PAE — ${reportLabel.toUpperCase()} — ${reportDesde} a ${reportHasta}`];
-        const headerRow = ['N°', 'APELLIDOS', 'NOMBRE', 'CURSO', 'Total Desayunos', 'Total Almuerzos', 'Total Días', 'CORREO'];
+        const headerRow = ['N°', 'APELLIDOS', 'NOMBRE', 'CURSO', 'Total Desayunos', 'Total Almuerzos', 'Total Días', 'ESTADO', 'CORREO'];
 
         const dataRows = students.map((s, idx) => {
           let totalD = 0, totalA = 0;
@@ -147,13 +235,14 @@ const AdminDashboard = () => {
             if (meals.includes('desayuno')) totalD++;
             if (meals.includes('almuerzo')) totalA++;
           });
-          return [idx + 1, s.apellidos, s.nombres, s.curso, totalD, totalA, diasUnicos.size, s.correo];
+          const estado = diasUnicos.size > 0 ? 'Con consumos' : 'Sin registro';
+          return [idx + 1, s.apellidos, s.nombres, s.curso, totalD, totalA, diasUnicos.size, estado, s.correo];
         });
 
         const aoa = [titleRow, headerRow, ...dataRows];
         const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
-        ws['!cols'] = [{ wch: 4 }, { wch: 22 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 30 }];
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+        ws['!cols'] = [{ wch: 4 }, { wch: 22 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 15 }, { wch: 30 }];
         XLSX.utils.book_append_sheet(wb, ws, reportLabel.substring(0, 31));
 
       } else {
@@ -171,18 +260,22 @@ const AdminDashboard = () => {
             headerRow1.push(d, '');
             headerRow2.push('D', 'A');
           }
-          headerRow1.push('CORREO');
-          headerRow2.push('');
+          headerRow1.push('ESTADO', 'CORREO');
+          headerRow2.push('', '');
 
           const dataRows = students.map((s, idx) => {
             const row = [idx + 1, s.apellidos, s.nombres, s.curso];
 
+            let totalMarcasMes = 0;
             for (let d = 1; d <= daysInMonth; d++) {
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
               const meals = s.days[dateStr] || [];
               row.push(meals.includes('desayuno') ? 'X' : '', meals.includes('almuerzo') ? 'X' : '');
+              totalMarcasMes += meals.length;
             }
 
+            const estadoMes = totalMarcasMes > 0 ? 'Con consumos' : 'Sin registro';
+            row.push(estadoMes);
             row.push(s.correo);
             return row;
           });
@@ -190,7 +283,7 @@ const AdminDashboard = () => {
           const aoa = [titleRow, headerRow1, headerRow2, ...dataRows];
           const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-          const totalCols = 4 + (daysInMonth * 2) + 1;
+          const totalCols = 4 + (daysInMonth * 2) + 2;
           ws['!merges'] = [
             { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }
           ];
@@ -203,7 +296,7 @@ const AdminDashboard = () => {
           for (let d = 0; d < daysInMonth; d++) {
             colWidths.push({ wch: 3 }, { wch: 3 });
           }
-          colWidths.push({ wch: 30 });
+          colWidths.push({ wch: 15 }, { wch: 30 });
           ws['!cols'] = colWidths;
 
           const sheetName = months.length === 1
@@ -213,7 +306,20 @@ const AdminDashboard = () => {
         });
       }
 
-      XLSX.writeFile(wb, `reporte_${reportType}_${reportFormat}_${reportDesde}_${reportHasta}.xlsx`);
+      let scopeFilename = reportScope;
+      if (reportScope === 'curso') {
+        const cName = courses.find(c => c.id_curso.toString() === selectedCursoId.toString())?.nombre_curso || selectedCursoId;
+        scopeFilename = `curso_${cName.replace(/\s+/g, '_')}`;
+      } else if (reportScope === 'nivel') {
+        const nName = levels.find(l => l.id_nivel.toString() === selectedNivelId.toString())?.nombre || selectedNivelId;
+        scopeFilename = `nivel_${nName.replace(/\s+/g, '_')}`;
+      } else if (reportScope === 'individual' && selectedAlumno) {
+        scopeFilename = `alumno_${selectedAlumno.paterno}_${selectedAlumno.nombres.split(' ')[0]}`;
+      } else if (reportScope === 'personalizado') {
+        scopeFilename = `personalizado_${selectedAlumnos.length}_alumnos`;
+      }
+
+      XLSX.writeFile(wb, `reporte_${scopeFilename}_${reportType}_${reportFormat}_${reportDesde}_${reportHasta}.xlsx`);
 
     } catch (err) {
       console.error(err);
@@ -420,6 +526,179 @@ const AdminDashboard = () => {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Ámbito del Reporte */}
+              <div className="report-section">
+                <label className="report-section-label">Ámbito de Selección de Alumnos</label>
+                <div className="report-scope-selector">
+                  <button 
+                    type="button"
+                    className={`report-scope-btn ${reportScope === 'masivo' ? 'active' : ''}`}
+                    onClick={() => setReportScope('masivo')}
+                  >
+                    🌍 Masivo
+                  </button>
+                  <button 
+                    type="button"
+                    className={`report-scope-btn ${reportScope === 'curso' ? 'active' : ''}`}
+                    onClick={() => setReportScope('curso')}
+                  >
+                    🏫 Por Curso
+                  </button>
+                  <button 
+                    type="button"
+                    className={`report-scope-btn ${reportScope === 'nivel' ? 'active' : ''}`}
+                    onClick={() => setReportScope('nivel')}
+                  >
+                    📈 Por Nivel
+                  </button>
+                  <button 
+                    type="button"
+                    className={`report-scope-btn ${reportScope === 'individual' ? 'active' : ''}`}
+                    onClick={() => setReportScope('individual')}
+                  >
+                    👤 Individual
+                  </button>
+                  <button 
+                    type="button"
+                    className={`report-scope-btn ${reportScope === 'personalizado' ? 'active' : ''}`}
+                    onClick={() => setReportScope('personalizado')}
+                  >
+                    ⚙️ Personalizado
+                  </button>
+                </div>
+
+                {/* Controles Dinámicos */}
+                {reportScope === 'curso' && (
+                  <div className="report-scope-control fade-in" style={{ marginTop: '12px' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-light)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>Curso</label>
+                    <select 
+                      value={selectedCursoId} 
+                      onChange={(e) => setSelectedCursoId(e.target.value)}
+                      className="report-select-input"
+                    >
+                      <option value="">-- Selecciona un Curso --</option>
+                      {courses.map(c => (
+                        <option key={c.id_curso} value={c.id_curso}>{c.nombre_curso}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {reportScope === 'nivel' && (
+                  <div className="report-scope-control fade-in" style={{ marginTop: '12px' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-light)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>Nivel de Enseñanza</label>
+                    <select 
+                      value={selectedNivelId} 
+                      onChange={(e) => setSelectedNivelId(e.target.value)}
+                      className="report-select-input"
+                    >
+                      <option value="">-- Selecciona un Nivel --</option>
+                      {levels.map(l => (
+                        <option key={l.id_nivel} value={l.id_nivel}>{l.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {reportScope === 'individual' && (
+                  <div className="report-scope-control fade-in" style={{ marginTop: '12px', position: 'relative' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-light)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>Buscar Alumno</label>
+                    {selectedAlumno ? (
+                      <div className="selected-item-display">
+                        <span>{selectedAlumno.name} ({selectedAlumno.rut}-{selectedAlumno.dv} &bull; {selectedAlumno.nombre_curso || 'Sin Curso'})</span>
+                        <button 
+                          type="button" 
+                          onClick={() => { setSelectedAlumno(null); setStudentSearchTerm(''); }}
+                          className="remove-btn"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <input 
+                          type="text" 
+                          placeholder="Escribe nombre, apellido o RUT del alumno..."
+                          value={studentSearchTerm} 
+                          onChange={(e) => setStudentSearchTerm(e.target.value)}
+                          className="report-text-input"
+                        />
+                        {isSearchingStudents && <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '4px' }}>Buscando...</div>}
+                        {studentSearchResults.length > 0 && (
+                          <div className="report-search-results-dropdown">
+                            {studentSearchResults.map(s => (
+                              <div 
+                                key={s.id_alumno} 
+                                className="report-search-result-item"
+                                onClick={() => {
+                                  setSelectedAlumno(s);
+                                  setStudentSearchTerm('');
+                                  setStudentSearchResults([]);
+                                }}
+                              >
+                                {s.name} ({s.rut}-{s.dv} &bull; {s.nombre_curso || 'Sin Curso'})
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {reportScope === 'personalizado' && (
+                  <div className="report-scope-control fade-in" style={{ marginTop: '12px' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-light)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>Seleccionar Múltiples Alumnos ({selectedAlumnos.length} agregados)</label>
+                    <div style={{ position: 'relative', marginBottom: '10px' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Buscar alumno para agregar al reporte..."
+                        value={studentSearchTerm} 
+                        onChange={(e) => setStudentSearchTerm(e.target.value)}
+                        className="report-text-input"
+                      />
+                      {isSearchingStudents && <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '4px' }}>Buscando...</div>}
+                      {studentSearchResults.length > 0 && (
+                        <div className="report-search-results-dropdown">
+                          {studentSearchResults
+                            .filter(s => !selectedAlumnos.some(a => a.id_alumno === s.id_alumno))
+                            .map(s => (
+                              <div 
+                                key={s.id_alumno} 
+                                className="report-search-result-item"
+                                onClick={() => {
+                                  setSelectedAlumnos([...selectedAlumnos, s]);
+                                  setStudentSearchTerm('');
+                                  setStudentSearchResults([]);
+                                }}
+                              >
+                                {s.name} ({s.rut}-{s.dv} &bull; {s.nombre_curso || 'Sin Curso'})
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedAlumnos.length > 0 && (
+                      <div className="selected-chips-container">
+                        {selectedAlumnos.map(a => (
+                          <div key={a.id_alumno} className="student-chip">
+                            <span>{a.name} ({a.nombre_curso || 'S/C'})</span>
+                            <button 
+                              type="button" 
+                              onClick={() => setSelectedAlumnos(selectedAlumnos.filter(x => x.id_alumno !== a.id_alumno))}
+                              className="chip-remove-btn"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Tipo de Reporte */}

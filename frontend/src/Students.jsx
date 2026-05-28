@@ -34,6 +34,7 @@ function Students() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [courseSearch, setCourseSearch] = useState('');
+  const [globalStudentSearch, setGlobalStudentSearch] = useState('');
   const [coursePage, setCoursePage] = useState(1);
   const COURSE_PAGE_SIZE = 9;
   const [filterEstado, setFilterEstado] = useState('');
@@ -264,19 +265,92 @@ function Students() {
         ) : activeSection === 'listado' && !selectedCourse ? (
           <div className="fade-in">
              <p style={{color: 'var(--text-light)', marginBottom: '16px'}}>
-                Selecciona la nómina de un curso para inspeccionar su universo de alumnos.
+                Selecciona la nómina de un curso para inspeccionar su universo de alumnos, o busca directamente un estudiante por su RUT o Nombre.
              </p>
-             <div style={{marginBottom: '16px'}}>
-               <div className="students-search" style={{maxWidth: '360px'}}>
+             
+             <div style={{display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap'}}>
+               <div className="students-search" style={{flex: '2', minWidth: '260px'}}>
                  <Search size={16} />
                  <input
                    type="text"
-                   placeholder="Buscar curso..."
+                   placeholder="Buscar estudiante global (por RUT o Nombre)..."
+                   value={globalStudentSearch}
+                   onChange={(e) => setGlobalStudentSearch(e.target.value)}
+                 />
+               </div>
+               <div className="students-search" style={{flex: '1', minWidth: '180px'}}>
+                 <Search size={16} />
+                 <input
+                   type="text"
+                   placeholder="Filtrar cursos..."
                    value={courseSearch}
                    onChange={(e) => setCourseSearch(e.target.value)}
                  />
                </div>
              </div>
+
+             {globalStudentSearch.trim().length >= 2 && (() => {
+               const globalFiltered = students.filter(s => 
+                 s.name.toLowerCase().includes(globalStudentSearch.toLowerCase()) ||
+                 s.rut.toLowerCase().includes(globalStudentSearch.toLowerCase())
+               );
+               return (
+                 <div className="fade-in" style={{marginBottom: '28px', background: '#F8FAFC', borderRadius: '14px', padding: '18px', border: '1px solid #E2E8F0'}}>
+                   <h3 style={{margin: '0 0 12px 0', color: 'var(--text-dark)', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                     <Users size={18} color="var(--primary)" />
+                     Estudiantes Encontrados ({globalFiltered.length})
+                   </h3>
+                   {globalFiltered.length > 0 ? (
+                     <div className="students-table-wrap" style={{background: 'white', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden'}}>
+                       <table className="students-table">
+                         <thead>
+                           <tr>
+                             <th>RUT</th>
+                             <th>Nombre Completo</th>
+                             <th>Curso</th>
+                             <th style={{textAlign: 'center'}}>Estado</th>
+                             <th style={{textAlign: 'center'}}>JUNAEB</th>
+                             <th style={{textAlign: 'right'}}>Acción</th>
+                           </tr>
+                         </thead>
+                         <tbody>
+                           {globalFiltered.slice(0, 15).map(s => (
+                             <tr key={s.id}>
+                               <td className="students-cell-mono">{s.rut}</td>
+                               <td className="students-cell-name">{s.name}</td>
+                               <td>{s.grade || 'Sin Curso'}</td>
+                               <td style={{textAlign: 'center'}}>
+                                 <span className={`students-badge ${s.activo ? 'badge-active' : 'badge-inactive'}`}>
+                                   {s.activo ? 'Activa' : 'Retirado'}
+                                 </span>
+                               </td>
+                               <td style={{textAlign: 'center'}}>
+                                  {s.es_beneficiario ? 
+                                    <span className="students-badge badge-junaeb"><ShieldCheck size={12}/> Beneficiario</span> : 
+                                    <span style={{color: 'var(--text-light)', fontSize:'0.82rem'}}>—</span>}
+                               </td>
+                               <td style={{textAlign: 'right'}}>
+                                 <button onClick={() => openDetails(s.id)} className="students-ficha-btn">
+                                   Ver Ficha
+                                 </button>
+                               </td>
+                             </tr>
+                           ))}
+                         </tbody>
+                       </table>
+                       {globalFiltered.length > 15 && (
+                         <p style={{margin: 0, padding: '10px', fontSize: '0.82rem', color: 'var(--text-light)', textAlign: 'center', background: '#F8FAFC', borderTop: '1px solid #E2E8F0'}}>
+                           Mostrando los primeros 15 resultados. Escribe más letras para filtrar.
+                         </p>
+                       )}
+                     </div>
+                   ) : (
+                     <p style={{margin: 0, color: 'var(--text-light)', fontSize: '0.9rem', fontStyle: 'italic'}}>No se encontraron estudiantes coincidentes con la búsqueda.</p>
+                   )}
+                 </div>
+               );
+             })()}
+
              {(() => {
                const allCourses = Object.keys(courseGroups).sort().filter(c => c.toLowerCase().includes(courseSearch.toLowerCase()));
                // El card "Todos" ocupa un slot en página 1, así que la primera página tiene COURSE_PAGE_SIZE-1 cursos

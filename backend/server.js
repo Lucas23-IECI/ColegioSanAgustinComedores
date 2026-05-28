@@ -11,15 +11,43 @@ require('dotenv').config();
 const { verifyToken, verifyRole, JWT_SECRET } = require('./middleware/auth');
 
 const app = express();
-// Configuracion de CORS vital para aceptar cookies del puerto de React
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(o => o.trim());
+
+// ── CONFIGURACIÓN DE CORS ULTRA-ROBUSTA ──────────────────────────────────────
+const rawOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+let allowedOrigins = rawOrigin.split(',').map(o => o.trim());
+
+// PLAN DE RESPALDO: Si por problemas de dotenv la lista está vacía o incompleta, 
+// forzamos tus entornos locales, de red y de Tailscale con y sin puerto (por Nginx proxy).
+const fallbackOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://192.168.50.9:5173',
+  'http://100.80.196.9:5173',
+  'http://192.168.50.9',        // Petición directa a través de Nginx local
+  'http://100.80.196.9'         // Petición directa a través de Nginx Tailscale
+];
+
+fallbackOrigins.forEach(origin => {
+  if (!allowedOrigins.includes(origin)) {
+    allowedOrigins.push(origin);
+  }
+});
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // !origin permite peticiones internas del servidor, curl o Postman
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Si vuelve a fallar, esto nos dirá EXACTAMENTE qué IP/Origen está rechazando el navegador
+    console.error(`[CORS REJECTED] Petición bloqueada desde el origen: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.use(express.json({ limit: '20mb' }));
 app.use(cookieParser());
 

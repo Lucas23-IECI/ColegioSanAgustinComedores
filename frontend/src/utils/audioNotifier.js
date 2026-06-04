@@ -30,6 +30,27 @@ export function playBeep(type) {
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
       osc.onended = cleanup;
+    } else if (type === 'restriction') {
+      cleanup(); // Limpiar el oscilador inicial no utilizado
+      const beepDuration = 0.25;
+      const gap = 0.15;
+      const startTime = ctx.currentTime;
+      for (let i = 0; i < 5; i++) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.frequency.value = 660;
+        o.type = 'sine';
+        g.gain.value = 0.25;
+        const time = startTime + i * (beepDuration + gap);
+        o.start(time);
+        o.stop(time + beepDuration);
+        o.onended = () => {
+          o.disconnect();
+          g.disconnect();
+        };
+      }
     } else { // Error Grave
       osc.frequency.value = 220;
       osc.type = 'square';

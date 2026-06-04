@@ -55,6 +55,8 @@ const BarcodeScanner = () => {
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [esBeneficiario, setEsBeneficiario] = useState(true);
   const [restricciones, setRestricciones] = useState([]);
+  const [isOffline, setIsOffline] = useState(false);
+  const [showReconnectedBanner, setShowReconnectedBanner] = useState(false);
   const [todayCount, setTodayCount] = useState(0);
   const [todayStats, setTodayStats] = useState({ total: 0, beneficiarios: 0, noBeneficiarios: 0 });
   
@@ -97,6 +99,34 @@ const BarcodeScanner = () => {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   
+  // Polling de salud del servidor (heartbeat - INC-01, INC-03, INC-07)
+  useEffect(() => {
+    let consecutiveFailures = 0;
+    const checkHealth = async () => {
+      try {
+        await axios.get(`${API_URL}/health`, { timeout: 4000 });
+        consecutiveFailures = 0;
+        setIsOffline(prev => {
+          if (prev) {
+            // Estaba desconectado y se reconectó
+            setShowReconnectedBanner(true);
+            setTimeout(() => setShowReconnectedBanner(false), 5000);
+          }
+          return false;
+        });
+      } catch (err) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= 2) {
+          setIsOffline(true);
+        }
+      }
+    };
+    
+    checkHealth();
+    const interval = setInterval(checkHealth, 10000); // Cada 10 segundos
+    return () => clearInterval(interval);
+  }, []);
+  
   // Fetch today's stats — usa endpoint optimizado
   useEffect(() => {
     const fetchStats = async () => {
@@ -123,7 +153,7 @@ const BarcodeScanner = () => {
         inputRef.current?.focus();
       }
     };
-    const interval = setInterval(refocus, 2000);
+    const interval = setInterval(refocus, 1000); // INC-05: Cambiado de 2s a 1s
     return () => clearInterval(interval);
   }, [showResults]);
 
@@ -239,7 +269,7 @@ const BarcodeScanner = () => {
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (getTimeRemaining() === 'Servicio finalizado') return;
+    if (getTimeRemaining() === 'Servicio finalizado' || isOffline) return;
     const value = inputValue.trim();
     if (!value || isProcessing.current) return;
     
@@ -288,7 +318,7 @@ const BarcodeScanner = () => {
 
   // Flujo escáner: buscar → mostrar confirmación 2s → registrar automáticamente
   const scanByBarcode = async (barcode) => {
-    if (getTimeRemaining() === 'Servicio finalizado') return;
+    if (getTimeRemaining() === 'Servicio finalizado' || isOffline) return;
     if (isProcessing.current) return;
     isProcessing.current = true;
 
@@ -309,24 +339,33 @@ const BarcodeScanner = () => {
       
       const foundStudent = res.data.alumno;
       const isAlreadyReg = res.data.alreadyRegistered;
+      const incomingRestricciones = res.data.restricciones || [];
 
       setStudent(foundStudent);
       setAlreadyRegistered(isAlreadyReg);
       setEsBeneficiario(res.data.esBeneficiario);
-      setRestricciones(res.data.restricciones || []);
+      setRestricciones(incomingRestricciones);
       setLoading(false);
+
+      // INC-06: Pitido y flash rojo de restricción dietaria si corresponde
+      if (incomingRestricciones.length > 0) {
+        triggerFlash('restriction');
+        playBeep('restriction');
+      }
 
       if (!isAlreadyReg) {
         // Mostrar confirmación 2 segundos antes de registrar
         setPendingRegistration({ student: foundStudent, benefStatus: res.data.esBeneficiario, mealType });
         pendingTimer.current = setTimeout(async () => {
           setPendingRegistration(null);
-          await registerMeal(foundStudent, res.data.esBeneficiario, mealType);
+          await registerMeal(foundStudent, res.data.esBeneficiario, mealType, incomingRestricciones.length > 0);
           isProcessing.current = false;
         }, 2000);
       } else {
-        triggerFlash('warning');
-        playBeep('warning');
+        if (incomingRestricciones.length === 0) {
+          triggerFlash('warning');
+          playBeep('warning');
+        }
         isProcessing.current = false;
       }
     } catch (err) {
@@ -350,7 +389,7 @@ const BarcodeScanner = () => {
     setInputValue('');
     setSelectedIndex(-1);
     
-    if (getTimeRemaining() === 'Servicio finalizado') return;
+    if (getTimeRemaining() === 'Servicio finalizado' || isOffline) return;
     if (isProcessing.current) return;
     isProcessing.current = true;
     
@@ -370,16 +409,25 @@ const BarcodeScanner = () => {
       
       const foundStudent = res.data.alumno;
       const isAlreadyReg = res.data.alreadyRegistered;
+      const incomingRestricciones = res.data.restricciones || [];
 
       setStudent(foundStudent);
       setAlreadyRegistered(isAlreadyReg);
       setEsBeneficiario(res.data.esBeneficiario);
-      setRestricciones(res.data.restricciones || []);
+      setRestricciones(incomingRestricciones);
+
+      // INC-06: Alerta si hay restricciones dietarias
+      if (incomingRestricciones.length > 0) {
+        triggerFlash('restriction');
+        playBeep('restriction');
+      }
 
       if (!isAlreadyReg) {
-        await registerMeal(foundStudent, res.data.esBeneficiario, mealType);
+        await registerMeal(foundStudent, res.data.esBeneficiario, mealType, incomingRestricciones.length > 0);
       } else {
-        playBeep('warning');
+        if (incomingRestricciones.length === 0) {
+          playBeep('warning');
+        }
       }
     } catch (err) {
       if (err.response && err.response.status === 403) {
@@ -396,7 +444,7 @@ const BarcodeScanner = () => {
     }
   };
 
-  const registerMeal = async (studentData, benefStatus, mealType) => {
+  const registerMeal = async (studentData, benefStatus, mealType, hasRestrictions = false) => {
     try {
       const res = await axios.post(`${API_URL}/lunches`, {
         id_alumno: studentData.id_alumno,
@@ -412,14 +460,23 @@ const BarcodeScanner = () => {
         beneficiarios: benefStatus ? prev.beneficiarios + 1 : prev.beneficiarios,
         noBeneficiarios: !benefStatus ? prev.noBeneficiarios + 1 : prev.noBeneficiarios
       }));
-      triggerFlash('success');
-      playBeep('success');
+      
+      if (hasRestrictions) {
+        triggerFlash('restriction');
+      } else {
+        triggerFlash('success');
+        playBeep('success');
+      }
     } catch (err) {
       if (err.response && err.response.status === 409) {
         setAlreadyRegistered(true);
         setSuccessMsg('');
-        triggerFlash('warning');
-        playBeep('warning');
+        if (!hasRestrictions) {
+          triggerFlash('warning');
+          playBeep('warning');
+        } else {
+          triggerFlash('restriction');
+        }
       } else {
         setError('Error al registrar. Intenta nuevamente.');
         triggerFlash('error');
@@ -430,7 +487,7 @@ const BarcodeScanner = () => {
 
   const triggerFlash = (type) => {
     if (!flashMode) return;
-    const colors = { success: 'flash-green', error: 'flash-red', warning: 'flash-yellow' };
+    const colors = { success: 'flash-green', error: 'flash-red', warning: 'flash-yellow', restriction: 'flash-red' };
     setFlashColor(colors[type] || null);
     setTimeout(() => setFlashColor(null), 800);
   };
@@ -531,18 +588,18 @@ const BarcodeScanner = () => {
     <>
       {/* Scanner status indicator */}
       <div 
-        className={`scanner-status ${!isFinished && scannerActive ? 'active' : 'inactive'}`}
-        onClick={isFinished ? undefined : handleToggleScanner}
+        className={`scanner-status ${!isFinished && !isOffline && scannerActive ? 'active' : 'inactive'}`}
+        onClick={isFinished || isOffline ? undefined : handleToggleScanner}
         role="button"
         tabIndex={-1}
-        title={isFinished ? (timeRemaining === 'Servicio no iniciado' ? 'Servicio no iniciado' : 'Servicio finalizado') : (scannerActive ? 'Escáner detectado — click para cambiar' : 'Sin escáner — click para cambiar')}
-        style={isFinished ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+        title={isOffline ? 'Sistema fuera de línea' : isFinished ? (timeRemaining === 'Servicio no iniciado' ? 'Servicio no iniciado' : 'Servicio finalizado') : (scannerActive ? 'Escáner detectado — click para cambiar' : 'Sin escáner — click para cambiar')}
+        style={isFinished || isOffline ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
       >
-        {!isFinished && scannerActive ? <Zap size={16} /> : <ZapOff size={16} />}
-        <span>{!isFinished && scannerActive ? 'Escáner Activo' : 'Escáner Desactivado'}</span>
+        {!isFinished && !isOffline && scannerActive ? <Zap size={16} /> : <ZapOff size={16} />}
+        <span>{isOffline ? 'Sistema fuera de línea' : !isFinished && scannerActive ? 'Escáner Activo' : 'Escáner Desactivado'}</span>
       </div>
 
-      {/* Input field — SIEMPRE funciona (excepto si finalizado) */}
+      {/* Input field — SIEMPRE funciona (excepto si finalizado u offline) */}
       <form onSubmit={handleSubmit} className="kiosk-input-form">
         <div className="kiosk-input-wrapper">
           <Search size={20} className="kiosk-input-icon" />
@@ -550,21 +607,21 @@ const BarcodeScanner = () => {
             ref={inputRef}
             type="text"
             className="kiosk-input"
-            style={isFinished ? { backgroundColor: '#F3F4F6', cursor: 'not-allowed', color: '#9CA3AF' } : {}}
-            placeholder={isFinished ? (timeRemaining === 'Servicio no iniciado' ? 'Servicio no iniciado — ingreso bloqueado' : 'Servicio finalizado — ingreso bloqueado') : (scannerActive ? 'Esperando escaneo de tarjeta...' : 'RUT o nombre del alumno...')}
+            style={isFinished || isOffline ? { backgroundColor: '#F3F4F6', cursor: 'not-allowed', color: '#9CA3AF' } : {}}
+            placeholder={isOffline ? 'Sistema fuera de línea — reconectando...' : isFinished ? (timeRemaining === 'Servicio no iniciado' ? 'Servicio no iniciado — ingreso bloqueado' : 'Servicio finalizado — ingreso bloqueado') : (scannerActive ? 'Esperando escaneo de tarjeta...' : 'RUT o nombre del alumno...')}
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            disabled={isFinished}
-            autoFocus={!isFinished}
+            disabled={isFinished || isOffline}
+            autoFocus={!isFinished && !isOffline}
             autoComplete="off"
           />
           <button
             type="button"
             className={`kiosk-filter-btn ${showFilters ? 'active' : ''}`}
-            onClick={isFinished ? undefined : () => setShowFilters(prev => !prev)}
-            disabled={isFinished}
-            style={isFinished ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
+            onClick={isFinished || isOffline ? undefined : () => setShowFilters(prev => !prev)}
+            disabled={isFinished || isOffline}
+            style={isFinished || isOffline ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             title="Filtros avanzados"
           >
             <Filter size={16} />
@@ -625,6 +682,28 @@ const BarcodeScanner = () => {
     <div className={`kiosk-scanner ${layoutMode === 'columns' ? 'kiosk-columns' : ''}`}>
       {/* Flash overlay */}
       {flashColor && <div className={`kiosk-flash-overlay ${flashColor}`} />}
+
+      {/* Banner de Reconexión (INC-07) */}
+      {showReconnectedBanner && (
+        <div className="kiosk-reconnected-banner">
+          <CheckCircle size={18} />
+          <span>Conexión restaurada. El sistema está en línea.</span>
+        </div>
+      )}
+
+      {/* Pantalla Offline Bloqueante (INC-03) */}
+      {isOffline && (
+        <div className="kiosk-offline-overlay">
+          <div className="kiosk-offline-card">
+            <ZapOff size={48} className="kiosk-error-anim" style={{ color: '#dc2626' }} />
+            <h2 className="kiosk-offline-title">Sistema no disponible</h2>
+            <p className="kiosk-offline-desc">
+              Se ha perdido la conexión con el servidor. Por favor, espere mientras el sistema intenta restablecer el enlace automáticamente.
+            </p>
+            <div className="kiosk-offline-loader" />
+          </div>
+        </div>
+      )}
 
       {/* Top bar: turno + controls */}
       <div className="kiosk-topbar">

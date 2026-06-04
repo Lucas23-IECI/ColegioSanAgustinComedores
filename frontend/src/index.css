@@ -2838,3 +2838,73 @@ body:has(.kiosk-mode) #root {
   color: #059669;
   border-color: rgba(16, 185, 129, 0.25);
 }
+
+/* Estilos para el estado Offline / Heartbeat (INC-03) */
+.kiosk-offline-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.96);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border-radius: 14px;
+  border: 2px solid #ef4444;
+  padding: 32px;
+  animation: kioskFadeIn 0.3s ease-out;
+}
+
+.kiosk-offline-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 400px;
+  text-align: center;
+}
+
+.kiosk-offline-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #dc2626;
+  margin: 0;
+}
+
+.kiosk-offline-desc {
+  font-size: 0.98rem;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.kiosk-offline-loader {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(239, 68, 68, 0.15);
+  border-top: 4px solid #ef4444;
+  border-radius: 50%;
+  animation: kioskSpin 1s linear infinite;
+  margin-top: 12px;
+}
+
+/* Banner de reconexión (INC-07) */
+.kiosk-reconnected-banner {
+  background: #10b981;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  animation: kioskFadeIn 0.3s ease-out;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+

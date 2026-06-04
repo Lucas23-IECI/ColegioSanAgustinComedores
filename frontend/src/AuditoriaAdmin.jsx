@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import { ArrowLeft, RefreshCw, Download, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
-
-const API = 'http://localhost:5000';
+import { API_URL } from './config';
 const PAGE_SIZE = 20;
 
 // ─── Catálogo de acciones auditables ──────────────────────────────────────────
@@ -139,7 +138,7 @@ const AuditoriaAdmin = () => {
       if (filtroDesde)  params.set('desde', filtroDesde);
       if (filtroHasta)  params.set('hasta', filtroHasta);
 
-      const res = await axios.get(`${API}/api/admin/audit-log?${params}`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/admin/audit-log?${params}`, { withCredentials: true });
       setRows(res.data.rows);
       setTotal(res.data.total);
       setPages(res.data.pages);

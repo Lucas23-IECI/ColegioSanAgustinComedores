@@ -7,7 +7,7 @@ import './index.css';
 
 function getAutoMealType() {
   const hour = new Date().getHours();
-  return hour < 13 ? 'Desayuno' : 'Almuerzo';
+  return hour < 12 ? 'Desayuno' : 'Almuerzo';
 }
 
 function formatClock() {

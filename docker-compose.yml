@@ -51,5 +51,31 @@ services:
     depends_on:
       - backend
 
+  # ── 4. Respaldo Automático (INC-08) ──────────────────────────────────────────
+  backup:
+    image: postgres:16-alpine
+    container_name: colegio_backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      PGPASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./backend/backup.sh:/backup.sh
+    entrypoint: >
+      sh -c "
+      chmod +x /backup.sh;
+      echo 'Servicio de backup automático diario iniciado.';
+      while true; do
+        sleep 86400;
+        /backup.sh;
+      done
+      "
+
 volumes:
   postgres_data:

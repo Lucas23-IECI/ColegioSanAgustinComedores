@@ -104,6 +104,15 @@ const ensureUsuariosColumnas = async () => {
   await pool.query(`
     ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nombre VARCHAR(100)
   `);
+  await pool.query(`
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS intentos_fallidos INT DEFAULT 0
+  `);
+  await pool.query(`
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS bloqueado_hasta TIMESTAMP
+  `);
+  await pool.query(`
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS token_version INT DEFAULT 1
+  `);
 };
 
 const ensureAuditLogTable = async () => {
@@ -1216,14 +1225,63 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const user = userQuery.rows[0];
+
+    // Verificar si la cuenta está bloqueada temporalmente
+    if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
+      const remainingMin = Math.ceil((new Date(user.bloqueado_hasta) - new Date()) / (60 * 1000));
+      return res.status(423).json({ 
+        message: `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intente de nuevo en ${remainingMin} minutos.` 
+      });
+    }
+
     const passMatch = await bcrypt.compare(password, user.password_hash);
     if (!passMatch) {
-      registrarAudit({ usuario_id: user.id, usuario_correo: user.correo, accion: 'LOGIN_FALLIDO', detalle: { motivo: 'password_incorrecta' }, ip: getClientIp(req) });
-      return res.status(401).json({ message: 'Credenciales inválidas' });
+      const nuevosIntentos = (user.intentos_fallidos || 0) + 1;
+      let bloqueadoHasta = null;
+
+      if (nuevosIntentos >= 3) {
+        // Bloquear por 15 minutos
+        bloqueadoHasta = new Date(Date.now() + 15 * 60 * 1000);
+        await pool.query(
+          'UPDATE usuarios SET intentos_fallidos = $1, bloqueado_hasta = $2 WHERE id = $3',
+          [nuevosIntentos, bloqueadoHasta, user.id]
+        );
+        registrarAudit({ 
+          usuario_id: user.id, 
+          usuario_correo: user.correo, 
+          accion: 'LOGIN_FALLIDO', 
+          detalle: { motivo: 'password_incorrecta_bloqueado', intentos: nuevosIntentos }, 
+          ip: getClientIp(req) 
+        });
+        return res.status(423).json({ 
+          message: 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada por 15 minutos.' 
+        });
+      } else {
+        await pool.query(
+          'UPDATE usuarios SET intentos_fallidos = $1 WHERE id = $2',
+          [nuevosIntentos, user.id]
+        );
+        registrarAudit({ 
+          usuario_id: user.id, 
+          usuario_correo: user.correo, 
+          accion: 'LOGIN_FALLIDO', 
+          detalle: { motivo: 'password_incorrecta', intentos: nuevosIntentos }, 
+          ip: getClientIp(req) 
+        });
+        return res.status(401).json({ message: 'Credenciales inválidas' });
+      }
+    }
+
+    // Resetear contador de intentos fallidos en login exitoso
+    if (user.intentos_fallidos > 0 || user.bloqueado_hasta) {
+      await pool.query(
+        'UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = $1',
+        [user.id]
+      );
     }
 
     const token = jwt.sign(
-      { id: user.id, correo: user.correo, nombre: user.nombre || null, rol: user.rol }, 
+      { id: user.id, correo: user.correo, nombre: user.nombre || null, rol: user.rol, token_version: user.token_version || 1 }, 
       JWT_SECRET, 
       { expiresIn: '8h' }
     );
@@ -1262,6 +1320,26 @@ app.post('/api/auth/logout', (req, res) => {
   } catch (_) {}
   res.clearCookie('token');
   res.json({ message: 'Logout exitoso' });
+});
+
+// === ENDPOINT DE SALUD (Heartbeat del Kiosco - INC-01) ===
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (err) {
+    console.error('[health] Error en chequeo de salud:', err.message);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: err.message
+    });
+  }
 });
 
 // === BÚSQUEDA INTELIGENTE (Lector o Admin) ===
@@ -2861,6 +2939,7 @@ app.put('/api/admin/usuarios/:id', verifyToken, verifyRole(['admin']), async (re
       const hash = await bcrypt.hash(password, salt);
       updates.push(`password_hash = $${idx++}`);
       values.push(hash);
+      updates.push(`token_version = token_version + 1`);
     }
 
     if (updates.length === 0) {

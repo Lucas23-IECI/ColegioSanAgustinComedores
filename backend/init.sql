@@ -188,7 +188,11 @@ CREATE TABLE usuarios (
   correo VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   rol VARCHAR(20) NOT NULL, -- 'admin', 'lector', 'asistente_social'
-  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  nombre VARCHAR(100),
+  intentos_fallidos INT DEFAULT 0,
+  bloqueado_hasta TIMESTAMP,
+  token_version INT DEFAULT 1
 );
 
 CREATE TABLE beneficiario_alimentacion (

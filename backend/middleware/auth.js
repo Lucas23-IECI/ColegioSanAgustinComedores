@@ -1,8 +1,10 @@
 const jwt = require('jsonwebtoken');
 
+const pool = require('../db');
+
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecreto_colegio123';
 
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const token = req.cookies.token; // Recupera desde HttpOnly Cookie
 
   if (!token) {
@@ -11,6 +13,18 @@ const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    // INC-04: Comparar versión del token con la BD
+    const userRes = await pool.query('SELECT token_version FROM usuarios WHERE id = $1', [decoded.id]);
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({ message: 'Usuario no encontrado' });
+    }
+
+    const currentVersion = userRes.rows[0].token_version;
+    if ((decoded.token_version || 1) !== (currentVersion || 1)) {
+      return res.status(401).json({ message: 'Sesión invalidada por cambio de contraseña. Por favor, inicie sesión de nuevo.' });
+    }
+
     req.user = decoded; // { id, correo, rol }
     next();
   } catch (err) {

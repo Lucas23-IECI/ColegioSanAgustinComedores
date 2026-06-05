@@ -1228,9 +1228,17 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Verificar si la cuenta está bloqueada temporalmente
     if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
-      const remainingMin = Math.ceil((new Date(user.bloqueado_hasta) - new Date()) / (60 * 1000));
+      const diffMs = new Date(user.bloqueado_hasta) - new Date();
+      const diffSec = Math.ceil(diffMs / 1000);
+      let tiempoStr = '';
+      if (diffSec < 60) {
+        tiempoStr = `${diffSec} segundos`;
+      } else {
+        const remainingMin = Math.ceil(diffSec / 60);
+        tiempoStr = `${remainingMin} minuto${remainingMin > 1 ? 's' : ''}`;
+      }
       return res.status(423).json({ 
-        message: `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intente de nuevo en ${remainingMin} minutos.` 
+        message: `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intente de nuevo en ${tiempoStr}.` 
       });
     }
 
@@ -1239,9 +1247,17 @@ app.post('/api/auth/login', async (req, res) => {
       const nuevosIntentos = (user.intentos_fallidos || 0) + 1;
       let bloqueadoHasta = null;
 
-      if (nuevosIntentos >= 3) {
-        // Bloquear por 15 minutos
-        bloqueadoHasta = new Date(Date.now() + 15 * 60 * 1000);
+      if (nuevosIntentos >= 5) {
+        // Bloqueo incremental tipo iPhone
+        let segundosBloqueo = 10;
+        if (nuevosIntentos === 5) segundosBloqueo = 10;       // 10s
+        else if (nuevosIntentos === 6) segundosBloqueo = 30;  // 30s
+        else if (nuevosIntentos === 7) segundosBloqueo = 60;  // 1 min
+        else if (nuevosIntentos === 8) segundosBloqueo = 300; // 5 min
+        else if (nuevosIntentos === 9) segundosBloqueo = 900; // 15 min
+        else segundosBloqueo = 3600;                          // 1 hora para >= 10 intentos
+
+        bloqueadoHasta = new Date(Date.now() + segundosBloqueo * 1000);
         await pool.query(
           'UPDATE usuarios SET intentos_fallidos = $1, bloqueado_hasta = $2 WHERE id = $3',
           [nuevosIntentos, bloqueadoHasta, user.id]
@@ -1250,11 +1266,13 @@ app.post('/api/auth/login', async (req, res) => {
           usuario_id: user.id, 
           usuario_correo: user.correo, 
           accion: 'LOGIN_FALLIDO', 
-          detalle: { motivo: 'password_incorrecta_bloqueado', intentos: nuevosIntentos }, 
+          detalle: { motivo: 'password_incorrecta_bloqueado', intentos: nuevosIntentos, segundos: segundosBloqueo }, 
           ip: getClientIp(req) 
         });
+        
+        const tiempoStr = segundosBloqueo < 60 ? `${segundosBloqueo} segundos` : `${segundosBloqueo / 60} minutos`;
         return res.status(423).json({ 
-          message: 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada por 15 minutos.' 
+          message: `Demasiados intentos fallidos. Su cuenta ha sido bloqueada por ${tiempoStr}.` 
         });
       } else {
         await pool.query(

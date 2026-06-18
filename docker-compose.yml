@@ -71,11 +71,17 @@ services:
       sh -c "
       chmod +x /backup.sh;
       echo 'Servicio de backup automático diario iniciado.';
+      /backup.sh;
       while true; do
         sleep 86400;
         /backup.sh;
       done
       "
 
+# ─────────────────────────────────────────────────────────────────────────────
+# IMPORTANTE: El volumen postgres_data almacena todos los datos de la BD.
+# NUNCA ejecutes 'docker compose down -v' en producción, ya que borrará
+# este volumen y perderás todos los datos. Usa solo 'docker compose down'.
+# ─────────────────────────────────────────────────────────────────────────────
 volumes:
   postgres_data:

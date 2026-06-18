@@ -1,39 +1,23 @@
--- Modulo Sistema Mayor (DER)
-DROP TABLE IF EXISTS lunch_registrations CASCADE;
-DROP TABLE IF EXISTS estudiantes CASCADE;
-DROP TABLE IF EXISTS students CASCADE;
-DROP TABLE IF EXISTS relacion_alumno_persona CASCADE;
-DROP TABLE IF EXISTS persona_contacto CASCADE;
-DROP TABLE IF EXISTS persona_contacto_detalle CASCADE;
-DROP TABLE IF EXISTS emergencia CASCADE;
-DROP TABLE IF EXISTS emergencia_detalle CASCADE;
-DROP TABLE IF EXISTS salud CASCADE;
-DROP TABLE IF EXISTS salud_detalle CASCADE;
-DROP TABLE IF EXISTS programa_apoyo CASCADE;
-DROP TABLE IF EXISTS pago CASCADE;
-DROP TABLE IF EXISTS pago_detalle CASCADE;
-DROP TABLE IF EXISTS matricula CASCADE;
-DROP TABLE IF EXISTS restriccion_dietaria CASCADE;
-DROP TABLE IF EXISTS beneficiario_alimentacion CASCADE;
-DROP TABLE IF EXISTS alumno_complemento CASCADE;
-DROP TABLE IF EXISTS alumno_excel_snapshot CASCADE;
-DROP TABLE IF EXISTS alumno CASCADE;
-DROP TABLE IF EXISTS curso CASCADE;
-DROP TABLE IF EXISTS nivel_ensenanza CASCADE;
-DROP TABLE IF EXISTS usuarios CASCADE;
+-- ─────────────────────────────────────────────────────────────────────────────
+-- init.sql  –  Creación segura del esquema base (sin DROP TABLE)
+-- Usa CREATE TABLE IF NOT EXISTS para que sea idempotente.
+-- Si las tablas ya existen, no se toca ningún dato.
+-- ─────────────────────────────────────────────────────────────────────────────
 
-CREATE TABLE nivel_ensenanza (
+-- Módulo Sistema Mayor (DER)
+
+CREATE TABLE IF NOT EXISTS nivel_ensenanza (
   id_nivel SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
 );
 
-CREATE TABLE curso (
+CREATE TABLE IF NOT EXISTS curso (
   id_curso SERIAL PRIMARY KEY,
   nombre_curso VARCHAR(100) NOT NULL,
   id_nivel INT REFERENCES nivel_ensenanza(id_nivel) ON DELETE CASCADE
 );
 
-CREATE TABLE alumno (
+CREATE TABLE IF NOT EXISTS alumno (
   id_alumno SERIAL PRIMARY KEY,
   matricula VARCHAR(50),
   rut VARCHAR(12) UNIQUE,
@@ -47,12 +31,12 @@ CREATE TABLE alumno (
   telefono VARCHAR(50),
   direccion VARCHAR(255),
   fecha_actualizacion TIMESTAMP,
-  codigo_barra VARCHAR(100) UNIQUE, -- NUEVO: Campo único para lector de tarjetas
+  codigo_barra VARCHAR(100) UNIQUE,
   tne_codigo_barra VARCHAR(100),
-  activo BOOLEAN DEFAULT true     -- NUEVO: Borrado lógico, en lugar de borrar la fila
+  activo BOOLEAN DEFAULT true
 );
 
-CREATE TABLE alumno_complemento (
+CREATE TABLE IF NOT EXISTS alumno_complemento (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   lista VARCHAR(50),
   estado VARCHAR(50),
@@ -73,7 +57,7 @@ CREATE TABLE alumno_complemento (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE persona_contacto (
+CREATE TABLE IF NOT EXISTS persona_contacto (
   id_persona SERIAL PRIMARY KEY,
   rut VARCHAR(12) UNIQUE,
   dv CHAR(1),
@@ -85,7 +69,7 @@ CREATE TABLE persona_contacto (
   direccion VARCHAR(255)
 );
 
-CREATE TABLE persona_contacto_detalle (
+CREATE TABLE IF NOT EXISTS persona_contacto_detalle (
   id_persona INT PRIMARY KEY REFERENCES persona_contacto(id_persona) ON DELETE CASCADE,
   fecha_nacimiento DATE,
   comuna VARCHAR(100),
@@ -97,7 +81,7 @@ CREATE TABLE persona_contacto_detalle (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE relacion_alumno_persona (
+CREATE TABLE IF NOT EXISTS relacion_alumno_persona (
   id_relacion SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   id_persona INT REFERENCES persona_contacto(id_persona) ON DELETE CASCADE,
@@ -107,7 +91,7 @@ CREATE TABLE relacion_alumno_persona (
   vive_con_alumno BOOLEAN DEFAULT false
 );
 
-CREATE TABLE matricula (
+CREATE TABLE IF NOT EXISTS matricula (
   id_matricula SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   id_curso INT REFERENCES curso(id_curso) ON DELETE CASCADE,
@@ -118,7 +102,7 @@ CREATE TABLE matricula (
   repetidor BOOLEAN DEFAULT false
 );
 
-CREATE TABLE pago (
+CREATE TABLE IF NOT EXISTS pago (
   id_pago SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   forma_pago VARCHAR(50),
@@ -127,7 +111,7 @@ CREATE TABLE pago (
   numero_cuenta VARCHAR(50)
 );
 
-CREATE TABLE pago_detalle (
+CREATE TABLE IF NOT EXISTS pago_detalle (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   co_banco VARCHAR(50),
   nu_tarjeta_bancaria VARCHAR(50),
@@ -135,7 +119,7 @@ CREATE TABLE pago_detalle (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE programa_apoyo (
+CREATE TABLE IF NOT EXISTS programa_apoyo (
   id_programa SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   vulnerable BOOLEAN DEFAULT false,
@@ -144,7 +128,7 @@ CREATE TABLE programa_apoyo (
   pro_retencion BOOLEAN DEFAULT false
 );
 
-CREATE TABLE salud (
+CREATE TABLE IF NOT EXISTS salud (
   id_salud SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   asma BOOLEAN DEFAULT false,
@@ -154,7 +138,7 @@ CREATE TABLE salud (
   alergia_medicamentos VARCHAR(255)
 );
 
-CREATE TABLE salud_detalle (
+CREATE TABLE IF NOT EXISTS salud_detalle (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   peso VARCHAR(50),
   talla VARCHAR(50),
@@ -166,7 +150,7 @@ CREATE TABLE salud_detalle (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE emergencia (
+CREATE TABLE IF NOT EXISTS emergencia (
   id_emergencia SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   avisar_a VARCHAR(100),
@@ -174,7 +158,7 @@ CREATE TABLE emergencia (
   trasladar_a VARCHAR(150)
 );
 
-CREATE TABLE emergencia_detalle (
+CREATE TABLE IF NOT EXISTS emergencia_detalle (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   seguro VARCHAR(100),
   isapre VARCHAR(100),
@@ -182,12 +166,13 @@ CREATE TABLE emergencia_detalle (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Modulo Alimentación y Autenticación
-CREATE TABLE usuarios (
+-- Módulo Alimentación y Autenticación
+
+CREATE TABLE IF NOT EXISTS usuarios (
   id SERIAL PRIMARY KEY,
   correo VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  rol VARCHAR(20) NOT NULL, -- 'admin', 'lector', 'asistente_social'
+  rol VARCHAR(20) NOT NULL,
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   nombre VARCHAR(100),
   intentos_fallidos INT DEFAULT 0,
@@ -195,7 +180,7 @@ CREATE TABLE usuarios (
   token_version INT DEFAULT 1
 );
 
-CREATE TABLE beneficiario_alimentacion (
+CREATE TABLE IF NOT EXISTS beneficiario_alimentacion (
   id_beneficiario SERIAL PRIMARY KEY,
   id_alumno INT NOT NULL REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   activo BOOLEAN NOT NULL DEFAULT true,
@@ -205,7 +190,7 @@ CREATE TABLE beneficiario_alimentacion (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE restriccion_dietaria (
+CREATE TABLE IF NOT EXISTS restriccion_dietaria (
   id_restriccion SERIAL PRIMARY KEY,
   id_alumno INT REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   descripcion VARCHAR(255) NOT NULL,
@@ -213,16 +198,14 @@ CREATE TABLE restriccion_dietaria (
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE alumno_excel_snapshot (
+CREATE TABLE IF NOT EXISTS alumno_excel_snapshot (
   id_alumno INT PRIMARY KEY REFERENCES alumno(id_alumno) ON DELETE CASCADE,
   raw_payload JSONB NOT NULL,
   fecha_importacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE lunch_registrations (
+CREATE TABLE IF NOT EXISTS lunch_registrations (
   id_registro SERIAL PRIMARY KEY,
-  -- MODIFICADO: Eliminado el ON DELETE CASCADE del id_alumno. Esto asegura 
-  -- que no se pierdan históricos de consumos si alguien hace force delete
   id_alumno INT REFERENCES alumno(id_alumno),
   fecha_entrega DATE NOT NULL DEFAULT CURRENT_DATE,
   hora_entrega TIME NOT NULL DEFAULT CURRENT_TIME,

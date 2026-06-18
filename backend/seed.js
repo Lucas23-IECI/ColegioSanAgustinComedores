@@ -5,6 +5,12 @@ const bcrypt = require('bcryptjs');
 
 async function setupAndSeed() {
   try {
+    const schemaExists = await pool.query("SELECT to_regclass('public.alumno') AS exists");
+    if (schemaExists.rows[0]?.exists) {
+      console.log('La base ya tiene el esquema principal. Se cancela seed.js para no sobrescribir datos existentes.');
+      return;
+    }
+
     const initSqlPath = path.join(__dirname, 'init.sql');
     const initSql = fs.readFileSync(initSqlPath, 'utf8');
 

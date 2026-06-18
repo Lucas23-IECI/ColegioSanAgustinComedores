@@ -12,26 +12,28 @@ const { verifyToken, verifyRole, JWT_SECRET } = require('./middleware/auth');
 
 const app = express();
 
-// ── CONFIGURACIÓN DE CORS ULTRA-ROBUSTA ──────────────────────────────────────
-const rawOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
-let allowedOrigins = rawOrigin.split(',').map(o => o.trim());
+// ── CONFIGURACIÓN DE CORS BASADA EN ENTORNO ──────────────────────────────────
+const parseOriginList = (value) => {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
 
-// PLAN DE RESPALDO: Si por problemas de dotenv la lista está vacía o incompleta, 
-// forzamos tus entornos locales, de red y de Tailscale con y sin puerto (por Nginx proxy).
-const fallbackOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://192.168.50.9:5173',
-  'http://100.80.196.9:5173',
-  'http://192.168.50.9',        // Petición directa a través de Nginx local
-  'http://100.80.196.9'         // Petición directa a través de Nginx Tailscale
-];
+const localOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const configuredOrigins = parseOriginList(process.env.CORS_ORIGIN);
+const extraConfiguredOrigins = parseOriginList(process.env.CORS_ORIGIN_EXTRA);
 
-fallbackOrigins.forEach(origin => {
-  if (!allowedOrigins.includes(origin)) {
-    allowedOrigins.push(origin);
-  }
-});
+const allowedOrigins = [...new Set([
+  ...localOrigins,
+  ...configuredOrigins,
+  ...extraConfiguredOrigins
+])];
+
+if (allowedOrigins.length > 0) {
+  console.log('Orígenes CORS permitidos:', allowedOrigins.join(', '));
+}
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -66,8 +68,14 @@ const bootstrapBaseSchema = async () => {
   return true;
 };
 
-const ensureDefaultUsers = async () => {
-  console.log('Verificando usuarios por defecto...');
+const ensureDefaultUsersIfEmpty = async () => {
+  const usersCountRes = await pool.query('SELECT COUNT(*)::int AS total FROM usuarios');
+  if ((usersCountRes.rows[0]?.total || 0) > 0) {
+    console.log('La tabla usuarios ya tiene registros. Se omite el seed de usuarios por defecto.');
+    return false;
+  }
+
+  console.log('Tabla usuarios vacía. Creando usuarios por defecto...');
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash('1234', salt);
 
@@ -82,9 +90,11 @@ const ensureDefaultUsers = async () => {
   );
 
   await pool.query(
-    "INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, 'asistente_social') ON CONFLICT (correo) DO UPDATE SET rol = 'asistente_social', password_hash = EXCLUDED.password_hash",
+    "INSERT INTO usuarios (correo, password_hash, rol) VALUES ($1, $2, 'asistente_social') ON CONFLICT (correo) DO NOTHING",
     ['asistente_social@colegio.cl', hash]
   );
+
+  return true;
 };
 
 const ensureExcelSnapshotTable = async () => {
@@ -3052,7 +3062,7 @@ bootstrapBaseSchema()
   .then(() => ensureExcelSnapshotTable())
   .then(() => ensureUsuariosColumnas())
   .then(() => ensureAuditLogTable())
-  .then(() => ensureDefaultUsers())
+  .then(() => ensureDefaultUsersIfEmpty())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

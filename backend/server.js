@@ -1664,16 +1664,16 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asi
       let extraJoin = '';
       let extraSelect = '';
       if (tipo === 'almuerzo') {
-        whereExtra += ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
+        whereExtra += ` AND LOWER(TRIM(lr.tipo_alimentacion)) = 'almuerzo'`;
       } else if (tipo === 'desayuno') {
-        whereExtra += ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
+        whereExtra += ` AND LOWER(TRIM(lr.tipo_alimentacion)) = 'desayuno'`;
       } else if (tipo === 'no_beneficiarios') {
         whereExtra += ` AND lr.es_beneficiario_al_momento = false`;
         ctePart = `
           WITH cambios_estado AS (
             SELECT id_alumno,
-              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = true) as fecha_cambio_a_beneficiario,
-              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = false) as fecha_cambio_a_no_beneficiario
+              CAST(MIN(fecha_entrega) FILTER (WHERE es_beneficiario_al_momento = true) AS TEXT) as fecha_cambio_a_beneficiario,
+              CAST(MIN(fecha_entrega) FILTER (WHERE es_beneficiario_al_momento = false) AS TEXT) as fecha_cambio_a_no_beneficiario
             FROM lunch_registrations
             WHERE fecha_entrega >= $1 AND fecha_entrega <= $2
             GROUP BY id_alumno
@@ -1709,16 +1709,16 @@ app.get('/api/admin/reportes/asistencia', verifyToken, verifyRole(['admin', 'asi
       let extraSelect = '';
 
       if (tipo === 'almuerzo') {
-        whereExtraTipo = ` AND LOWER(lr.tipo_alimentacion) = 'almuerzo'`;
+        whereExtraTipo = ` AND LOWER(TRIM(lr.tipo_alimentacion)) = 'almuerzo'`;
       } else if (tipo === 'desayuno') {
-        whereExtraTipo = ` AND LOWER(lr.tipo_alimentacion) = 'desayuno'`;
+        whereExtraTipo = ` AND LOWER(TRIM(lr.tipo_alimentacion)) = 'desayuno'`;
       } else if (tipo === 'no_beneficiarios') {
         whereExtraTipo = ` AND lr.es_beneficiario_al_momento = false`;
         ctePart = `
           WITH cambios_estado AS (
             SELECT id_alumno,
-              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = true) as fecha_cambio_a_beneficiario,
-              MIN(fecha_entrega)::TEXT FILTER (WHERE es_beneficiario_al_momento = false) as fecha_cambio_a_no_beneficiario
+              CAST(MIN(fecha_entrega) FILTER (WHERE es_beneficiario_al_momento = true) AS TEXT) as fecha_cambio_a_beneficiario,
+              CAST(MIN(fecha_entrega) FILTER (WHERE es_beneficiario_al_momento = false) AS TEXT) as fecha_cambio_a_no_beneficiario
             FROM lunch_registrations
             WHERE fecha_entrega >= $1 AND fecha_entrega <= $2
             GROUP BY id_alumno
